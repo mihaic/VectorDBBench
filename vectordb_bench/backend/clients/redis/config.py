@@ -33,6 +33,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     ef: int | None = None
     filtering_batch_size: int | None = None
     index: IndexType = IndexType.HNSW
+    calibration_target: float | None = None
 
     def index_param(self) -> dict:
         return {
@@ -44,5 +45,10 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef, "filtering_batch_size": self.filtering_batch_size},
+            "params": {
+                "ef": self.ef,
+                "calibration_target": self.calibration_target,
+                "calibration_param": "ef",
+                "filtering_batch_size": self.filtering_batch_size,
+            },
         }

@@ -323,6 +323,7 @@ class CaseRunner(BaseModel):
                 ground_truth=gt_df,
                 filters=self.ca.filters,
                 k=self.config.case_config.k,
+                db_case_config=self.config.db_case_config,
             )
         if TaskStage.SEARCH_CONCURRENT in self.config.stages:
             self.search_runner = MultiProcessingSearchRunner(
@@ -347,6 +348,7 @@ class CaseRunner(BaseModel):
             concurrencies=ca.concurrencies,
             k=self.config.case_config.k,
             normalize=self.normalize,
+            db_case_config=self.config.db_case_config,
         )
 
     def stop(self):

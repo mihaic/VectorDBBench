@@ -81,6 +81,7 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             efConstruction=parameters["ef_construction"],
             ef=parameters["ef_runtime"],
             filtering_batch_size=parameters["filtering_batch_size"],
+            calibration_target=parameters.get("calibrate"),
         ),
         **parameters,
     )
