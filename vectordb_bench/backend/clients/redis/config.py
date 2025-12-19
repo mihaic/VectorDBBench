@@ -32,6 +32,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     efConstruction: int
     ef: int | None = None
     index: IndexType = IndexType.HNSW
+    calibration_target: float | None = None
 
     def index_param(self) -> dict:
         return {
@@ -43,5 +44,9 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef},
+            "params": {
+                "ef": self.ef,
+                "calibration_target": self.calibration_target,
+                "calibration_param": "ef",
+            },
         }

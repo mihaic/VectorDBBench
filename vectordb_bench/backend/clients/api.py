@@ -220,6 +220,7 @@ class VectorDB(ABC):
         self,
         query: list[float],
         k: int = 100,
+        config_overwrite: dict[str, int] | None = None,
     ) -> list[int]:
         """Get k most similar embeddings to query vector.
 

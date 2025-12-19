@@ -110,9 +110,6 @@ class Redis(VectorDB):
         self.conn.close()
         self.conn = None
 
-    def ready_to_search(self) -> bool:
-        """Check if the database is ready to search."""
-
     def optimize(self, data_size: int | None = None):
         pass
 
@@ -170,12 +167,16 @@ class Redis(VectorDB):
         query: list[float],
         k: int = 100,
         timeout: int | None = None,
+        config_overwrite: dict[str, int] | None = None,
         **kwargs: Any,
     ) -> list[int]:
         assert self.conn is not None
 
         query_vector = np.array(query).astype(np.float32).tobytes()
-        ef_runtime = self.case_config.search_param()["params"]["ef"]
+        if config_overwrite is not None and "ef" in config_overwrite:
+            ef_runtime = config_overwrite["ef"]
+        else:
+            ef_runtime = self.case_config.search_param()["params"]["ef"]
         query_obj = (
             Query(f"{self._filter}=>[KNN {k} @{self._vector_field} $vec EF_RUNTIME {ef_runtime}]")
             .paging(0, k)

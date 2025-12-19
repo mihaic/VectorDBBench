@@ -26,6 +26,7 @@ class ReadWriteRunner(MultiProcessingSearchRunner, RatedMultiThreadingInsertRunn
         self,
         db: api.VectorDB,
         dataset: DatasetManager,
+        db_case_config: api.DBCaseConfig,
         insert_rate: int = 1000,
         normalize: bool = False,
         k: int = 100,
@@ -82,6 +83,7 @@ class ReadWriteRunner(MultiProcessingSearchRunner, RatedMultiThreadingInsertRunn
             db=db,
             test_data=test_emb,
             ground_truth=dataset.gt_data,
+            db_case_config=db_case_config,
             k=k,
             filters=filters,
         )
