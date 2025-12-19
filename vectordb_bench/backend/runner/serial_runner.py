@@ -128,12 +128,14 @@ class SerialSearchRunner:
         db: api.VectorDB,
         test_data: list[list[float]],
         ground_truth: list[list[int]],
+        db_case_config: api.DBCaseConfig,
         k: int = 100,
         filters: Filter = non_filter,
     ):
         self.db = db
         self.k = k
         self.filters = filters
+        self.db_case_config = db_case_config
 
         if isinstance(test_data[0], np.ndarray):
             self.test_data = [query.tolist() for query in test_data]
@@ -141,9 +143,9 @@ class SerialSearchRunner:
             self.test_data = test_data
         self.ground_truth = ground_truth
 
-    def _get_db_search_res(self, emb: list[float], retry_idx: int = 0) -> list[int]:
+    def _get_db_search_res(self, emb: list[float], retry_idx: int = 0, config_overwrite: dict[str, int] | None = None) -> list[int]:
         try:
-            results = self.db.search_embedding(emb, self.k)
+            results = self.db.search_embedding(emb, self.k, config_overwrite=config_overwrite)
         except Exception as e:
             log.warning(f"Serial search failed, retry_idx={retry_idx}, Exception: {e}")
             if retry_idx < config.MAX_SEARCH_RETRY:
@@ -153,6 +155,59 @@ class SerialSearchRunner:
             raise RuntimeError(msg) from e
 
         return results
+
+    def _calibrate(
+        self,
+        test_data: list,
+        ground_truth: list[list[int]],
+        calibration_param: str,
+        min_value: int,
+        recall: float,
+        max_value: int = 1000,
+    ) -> tuple[int, float]:
+        """Calibrate search for a given recall target."""
+        if min_value > max_value:
+            raise ValueError(
+                f"{min_value=} cannot be greater than {max_value=}"
+            )
+        lower_bound = min_value
+        upper_bound = max_value
+        lower_bound_visited = False
+        upper_bound_visited = False
+        current = (lower_bound + upper_bound) // 2
+        previous = current
+        current_recall = 0
+        while True:
+            previous_recall = current_recall
+            config_overwrite = {calibration_param: current}
+            recalls = []
+            for idx, emb in enumerate(test_data):
+                s = time.perf_counter()
+                results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
+                recalls.append(calc_recall(self.k, ground_truth[idx][: self.k], results))
+            current_recall = np.mean(recalls)
+            if np.isclose(current_recall, recall):
+                return current, current_recall
+            if current_recall > recall:
+                upper_bound = current
+                upper_bound_visited = True
+            else:
+                lower_bound = current
+                lower_bound_visited = True
+            next_value = (lower_bound + upper_bound) // 2
+            if (
+                (lower_bound_visited and next_value == lower_bound)
+                or (upper_bound_visited and next_value == upper_bound)
+            ):
+                if abs(previous_recall - recall) < abs(current_recall - recall):
+                    final_recall = previous_recall
+                    final_value = previous
+                else:
+                    final_recall = current_recall
+                    final_value = current
+                return final_value, final_recall
+            previous = current
+            current = next_value
 
     def search(self, args: tuple[list, list[list[int]]]) -> tuple[float, float, float, float]:
         log.info(f"{mp.current_process().name:14} start search the entire test_data to get recall and latency")
@@ -164,11 +219,23 @@ class SerialSearchRunner:
             log.debug(f"test dataset size: {len(test_data)}")
             log.debug(f"ground truth size: {len(ground_truth)}")
 
+            if (
+                ground_truth is not None
+                and (calibration_target := self.db_case_config.search_param()["params"]["calibration_target"]) is not None
+            ):
+                calibration_param = self.db_case_config.search_param()["params"]["calibration_param"]
+                log.info(f"{mp.current_process().name:14} calibrating {calibration_param=} to {calibration_target=}")
+                value, recall = self._calibrate(test_data, ground_truth, calibration_param, self.k, calibration_target)
+                log.info(f"{mp.current_process().name:14} calibrated to {recall=} at {value}")
+                config_overwrite = {calibration_param: value}
+            else:
+                config_overwrite = None
+
             latencies, recalls, ndcgs = [], [], []
             for idx, emb in enumerate(test_data):
                 s = time.perf_counter()
                 try:
-                    results = self._get_db_search_res(emb)
+                    results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
                 except Exception as e:
                     log.warning(f"VectorDB search_embedding error: {e}")
                     raise e from None

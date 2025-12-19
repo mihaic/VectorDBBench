@@ -472,6 +472,10 @@ class HNSWBaseTypedDict(TypedDict):
         int | None,
         click.option("--ef-construction", type=int, help="hnsw ef-construction"),
     ]
+    calibrate: Annotated[
+        float | None,
+        click.option("--calibrate", type=float, help="hnsw calibration target"),
+    ]
 
 
 class HNSWBaseRequiredTypedDict(TypedDict):
