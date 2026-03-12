@@ -31,6 +31,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     M: int
     efConstruction: int
     ef: int | None = None
+    filtering_batch_size: int | None = None
     index: IndexType = IndexType.HNSW
 
     def index_param(self) -> dict:
@@ -43,5 +44,5 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef},
+            "params": {"ef": self.ef, "filtering_batch_size": self.filtering_batch_size},
         }

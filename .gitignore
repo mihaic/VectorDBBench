@@ -10,8 +10,8 @@ build/
 venv/
 .venv/
 .idea/
-results/
-logs/
+results*/
+logs*/
 
 # AI rules
 CLAUDE.md
