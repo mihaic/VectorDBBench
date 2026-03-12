@@ -27,6 +27,15 @@ class RedisTypedDict(TypedDict):
             help="Batch size for hybrid filtering policy (HYBRID_POLICY BATCHES)",
         ),
     ]
+    calibration_param: Annotated[
+        str | None,
+        click.option(
+            "--calibration-param",
+            type=click.Choice(["ef", "filtering_batch_size"]),
+            default="ef",
+            help="Parameter to calibrate to reach the calibration target recall",
+        ),
+    ]
     ssl: Annotated[
         bool,
         click.option(
@@ -82,6 +91,7 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             ef=parameters["ef_runtime"],
             filtering_batch_size=parameters["filtering_batch_size"],
             calibration_target=parameters.get("calibrate"),
+            calibration_param=parameters.get("calibration_param") or "ef",
         ),
         **parameters,
     )

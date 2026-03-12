@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, SecretStr
 
 from ..api import DBCaseConfig, DBConfig, IndexType, MetricType
@@ -34,6 +36,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     filtering_batch_size: int | None = None
     index: IndexType = IndexType.HNSW
     calibration_target: float | None = None
+    calibration_param: Literal["ef", "filtering_batch_size"] = "ef"
 
     def index_param(self) -> dict:
         return {
@@ -48,7 +51,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
             "params": {
                 "ef": self.ef,
                 "calibration_target": self.calibration_target,
-                "calibration_param": "ef",
+                "calibration_param": self.calibration_param,
                 "filtering_batch_size": self.filtering_batch_size,
             },
         }
