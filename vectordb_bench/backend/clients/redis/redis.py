@@ -175,9 +175,16 @@ class Redis(VectorDB):
         assert self.conn is not None
 
         query_vector = np.array(query).astype(np.float32).tobytes()
-        ef_runtime = self.case_config.search_param()["params"]["ef"]
+        search_params = self.case_config.search_param()["params"]
+        ef_runtime = search_params["ef"]
+        filtering_batch_size = search_params.get("filtering_batch_size")
+        is_filtering = self._filter != "*"
+        if is_filtering and filtering_batch_size is not None:
+            filtering_params = f" HYBRID_POLICY BATCHES BATCH_SIZE {filtering_batch_size}"
+        else:
+            filtering_params = ""
         query_obj = (
-            Query(f"{self._filter}=>[KNN {k} @{self._vector_field} $vec EF_RUNTIME {ef_runtime}]")
+            Query(f"{self._filter}=>[KNN {k} @{self._vector_field} $vec EF_RUNTIME {ef_runtime}{filtering_params}]")
             .paging(0, k)
         )
         query_params = {"vec": query_vector}

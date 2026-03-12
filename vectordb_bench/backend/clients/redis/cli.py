@@ -18,6 +18,15 @@ class RedisTypedDict(TypedDict):
     host: Annotated[str, click.option("--host", type=str, help="Db host", required=True)]
     password: Annotated[str, click.option("--password", type=str, help="Db password")]
     port: Annotated[int, click.option("--port", type=int, default=6379, help="Db Port")]
+    filtering_batch_size: Annotated[
+        int | None,
+        click.option(
+            "--filtering-batch-size",
+            type=int,
+            default=None,
+            help="Batch size for hybrid filtering policy (HYBRID_POLICY BATCHES)",
+        ),
+    ]
     ssl: Annotated[
         bool,
         click.option(
@@ -71,6 +80,7 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             M=parameters["m"],
             efConstruction=parameters["ef_construction"],
             ef=parameters["ef_runtime"],
+            filtering_batch_size=parameters["filtering_batch_size"],
         ),
         **parameters,
     )

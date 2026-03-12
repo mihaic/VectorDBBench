@@ -10,7 +10,8 @@ build/
 venv/
 .venv/
 .idea/
-logs/
+results*/
+logs*/
 
 # Worktrees
 .worktrees/
