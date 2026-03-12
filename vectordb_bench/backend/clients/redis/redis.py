@@ -178,7 +178,10 @@ class Redis(VectorDB):
             ef_runtime = config_overwrite["ef"]
         else:
             ef_runtime = self.case_config.search_param()["params"]["ef"]
-        filtering_batch_size = search_params.get("filtering_batch_size")
+        if config_overwrite is not None and "filtering_batch_size" in config_overwrite:
+            filtering_batch_size = config_overwrite["filtering_batch_size"]
+        else:
+            filtering_batch_size = search_params.get("filtering_batch_size")
         is_filtering = self._filter != "*"
         if is_filtering and filtering_batch_size is not None:
             filtering_params = f" HYBRID_POLICY BATCHES BATCH_SIZE {filtering_batch_size}"
