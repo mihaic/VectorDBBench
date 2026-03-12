@@ -72,19 +72,17 @@ class Redis(VectorDB):
             # check to see if index exists
             conn.ft(INDEX_NAME).info()
         except Exception:
+            index_params = self.case_config.index_param()
+            index_type = index_params["index_type"]
+            vector_field_attrs = {
+                "TYPE": self._redis_type,  # FLOAT16, FLOAT32 or FLOAT64
+                "DIM": vector_dimensions,  # Number of Vector Dimensions
+                "DISTANCE_METRIC": "COSINE",  # Vector Search Distance Metric
+                **index_params["params"],
+            }
             schema = [
                 NumericField(self._numeric_field),
-                VectorField(
-                    self._vector_field,  # Vector Field Name
-                    "HNSW",  # Vector Index Type: FLAT or HNSW
-                    {
-                        "TYPE": self._redis_type,  # FLOAT16, FLOAT32 or FLOAT64
-                        "DIM": vector_dimensions,  # Number of Vector Dimensions
-                        "DISTANCE_METRIC": "COSINE",  # Vector Search Distance Metric
-                        "M": self.case_config.index_param()["params"]["M"],
-                        "EF_CONSTRUCTION": self.case_config.index_param()["params"]["efConstruction"],
-                    },
-                ),
+                VectorField(self._vector_field, index_type, vector_field_attrs),
             ]
             if self.with_scalar_labels:
                 schema.append(TagField(self._label_field))
@@ -176,10 +174,6 @@ class Redis(VectorDB):
 
         query_vector = np.array(query).astype(self._np_dtype).tobytes()
         search_params = self.case_config.search_param()["params"]
-        if config_overwrite is not None and "ef" in config_overwrite:
-            ef_runtime = config_overwrite["ef"]
-        else:
-            ef_runtime = self.case_config.search_param()["params"]["ef"]
         if config_overwrite is not None and "filtering_batch_size" in config_overwrite:
             filtering_batch_size = config_overwrite["filtering_batch_size"]
         else:
@@ -189,8 +183,9 @@ class Redis(VectorDB):
             filtering_params = f" HYBRID_POLICY BATCHES BATCH_SIZE {filtering_batch_size}"
         else:
             filtering_params = ""
+        runtime_param = self.case_config.knn_runtime_param(config_overwrite)
         query_obj = (
-            Query(f"{self._filter}=>[KNN {k} @{self._vector_field} $vec EF_RUNTIME {ef_runtime}{filtering_params}]")
+            Query(f"{self._filter}=>[KNN {k} @{self._vector_field} $vec {runtime_param}{filtering_params}]")
             .paging(0, k)
         )
         query_params = {"vec": query_vector}

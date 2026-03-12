@@ -4,6 +4,8 @@ from pydantic import BaseModel, SecretStr
 
 from ..api import DBCaseConfig, DBConfig, IndexType, MetricType
 
+SVS_VAMANA_COMPRESSION_OPTIONS = ["LeanVec4x8", "LVQ8"]
+
 
 class RedisConfig(DBConfig):
     password: SecretStr | None = None
@@ -43,7 +45,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
         return {
             "metric_type": self.parse_metric(),
             "index_type": self.index.value,
-            "params": {"M": self.M, "efConstruction": self.efConstruction},
+            "params": {"M": self.M, "EF_CONSTRUCTION": self.efConstruction},
         }
 
     def search_param(self) -> dict:
@@ -56,3 +58,47 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
                 "filtering_batch_size": self.filtering_batch_size,
             },
         }
+
+    def knn_runtime_param(self, config_overwrite: dict | None = None) -> str:
+        ef = config_overwrite["ef"] if config_overwrite is not None and "ef" in config_overwrite else self.ef
+        return f"EF_RUNTIME {ef}"
+
+
+class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
+    graph_max_degree: int
+    construction_window_size: int
+    search_window_size: int | None = None
+    compression: Literal["LeanVec4x8", "LVQ8"] | None = None
+    filtering_batch_size: int | None = None
+    index: IndexType = IndexType.SVS_VAMANA
+    calibration_target: float | None = None
+    calibration_param: Literal["search_window_size", "filtering_batch_size"] = "search_window_size"
+    use_float16: bool = False
+
+    def index_param(self) -> dict:
+        params: dict = {
+            "GRAPH_MAX_DEGREE": self.graph_max_degree,
+            "CONSTRUCTION_WINDOW_SIZE": self.construction_window_size,
+        }
+        if self.compression is not None:
+            params["COMPRESSION"] = self.compression
+        return {
+            "metric_type": self.parse_metric(),
+            "index_type": self.index.value,
+            "params": params,
+        }
+
+    def search_param(self) -> dict:
+        return {
+            "metric_type": self.parse_metric(),
+            "params": {
+                "search_window_size": self.search_window_size,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "filtering_batch_size": self.filtering_batch_size,
+            },
+        }
+
+    def knn_runtime_param(self, config_overwrite: dict | None = None) -> str:
+        sws = config_overwrite["search_window_size"] if config_overwrite is not None and "search_window_size" in config_overwrite else self.search_window_size
+        return f"SEARCH_WINDOW_SIZE {sws}"

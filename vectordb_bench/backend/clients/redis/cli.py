@@ -11,7 +11,7 @@ from ....cli.cli import (
     run,
 )
 from .. import DB
-from .config import RedisHNSWConfig
+from .config import RedisHNSWConfig, SVS_VAMANA_COMPRESSION_OPTIONS
 
 
 class RedisTypedDict(TypedDict):
@@ -34,15 +34,6 @@ class RedisTypedDict(TypedDict):
             type=int,
             default=None,
             help="Batch size for hybrid filtering policy (HYBRID_POLICY BATCHES)",
-        ),
-    ]
-    calibration_param: Annotated[
-        str | None,
-        click.option(
-            "--calibration-param",
-            type=click.Choice(["ef", "filtering_batch_size"]),
-            default="ef",
-            help="Parameter to calibrate to reach the calibration target recall",
         ),
     ]
     ssl: Annotated[
@@ -78,6 +69,45 @@ class RedisTypedDict(TypedDict):
 class RedisHNSWTypedDict(CommonTypedDict, RedisTypedDict, HNSWFlavor2): ...
 
 
+class RedisSVSVAMANATypedDict(CommonTypedDict, RedisTypedDict):
+    graph_max_degree: Annotated[
+        int,
+        click.option(
+            "--graph-max-degree",
+            type=int,
+            required=True,
+            help="SVS-VAMANA GRAPH_MAX_DEGREE (equivalent to HNSW M)",
+        ),
+    ]
+    construction_window_size: Annotated[
+        int,
+        click.option(
+            "--construction-window-size",
+            type=int,
+            required=True,
+            help="SVS-VAMANA CONSTRUCTION_WINDOW_SIZE (equivalent to HNSW EF_CONSTRUCTION)",
+        ),
+    ]
+    search_window_size: Annotated[
+        int | None,
+        click.option(
+            "--search-window-size",
+            type=int,
+            default=None,
+            help="SVS-VAMANA SEARCH_WINDOW_SIZE (equivalent to HNSW EF_RUNTIME)",
+        ),
+    ]
+    compression: Annotated[
+        str | None,
+        click.option(
+            "--compression",
+            type=click.Choice(SVS_VAMANA_COMPRESSION_OPTIONS, case_sensitive=True),
+            default=None,
+            help="SVS-VAMANA compression type (LeanVec4x8 or LVQ8)",
+        ),
+    ]
+
+
 @cli.command()
 @click_parameter_decorators_from_typed_dict(RedisHNSWTypedDict)
 def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
@@ -101,6 +131,36 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             filtering_batch_size=parameters["filtering_batch_size"],
             calibration_target=parameters.get("calibrate"),
             calibration_param=parameters.get("calibration_param") or "ef",
+            use_float16=parameters["use_float16"],
+        ),
+        **parameters,
+    )
+
+
+@cli.command()
+@click_parameter_decorators_from_typed_dict(RedisSVSVAMANATypedDict)
+def RedisSVSVAMANA(**parameters: Unpack[RedisSVSVAMANATypedDict]):
+    from .config import RedisConfig, RedisSVSVAMANAConfig
+
+    run(
+        db=DB.Redis,
+        db_config=RedisConfig(
+            db_label=parameters["db_label"],
+            password=SecretStr(parameters["password"]) if parameters["password"] else None,
+            host=SecretStr(parameters["host"]),
+            port=parameters["port"],
+            ssl=parameters["ssl"],
+            ssl_ca_certs=parameters["ssl_ca_certs"],
+            cmd=parameters["cmd"],
+        ),
+        db_case_config=RedisSVSVAMANAConfig(
+            graph_max_degree=parameters["graph_max_degree"],
+            construction_window_size=parameters["construction_window_size"],
+            search_window_size=parameters["search_window_size"],
+            compression=parameters["compression"],
+            filtering_batch_size=parameters["filtering_batch_size"],
+            calibration_target=parameters.get("calibrate"),
+            calibration_param=parameters.get("calibration_param") or "search_window_size",
             use_float16=parameters["use_float16"],
         ),
         **parameters,

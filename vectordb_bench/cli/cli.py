@@ -464,6 +464,17 @@ class CommonTypedDict(TypedDict):
             show_default=True,
         ),
     ]
+    calibrate: Annotated[
+        float | None,
+        click.option("--calibrate", type=float, help="Target recall for calibration"),
+    ]
+    calibration_param: Annotated[
+        str | None,
+        click.option(
+            "--calibration-param",
+            help="Parameter to calibrate to reach the target recall",
+        ),
+    ]
 
 
 class HNSWBaseTypedDict(TypedDict):
@@ -471,10 +482,6 @@ class HNSWBaseTypedDict(TypedDict):
     ef_construction: Annotated[
         int | None,
         click.option("--ef-construction", type=int, help="hnsw ef-construction"),
-    ]
-    calibrate: Annotated[
-        float | None,
-        click.option("--calibrate", type=float, help="hnsw calibration target"),
     ]
 
 
