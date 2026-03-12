@@ -37,6 +37,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     index: IndexType = IndexType.HNSW
     calibration_target: float | None = None
     calibration_param: Literal["ef", "filtering_batch_size"] = "ef"
+    use_float16: bool = False
 
     def index_param(self) -> dict:
         return {
