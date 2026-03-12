@@ -43,6 +43,8 @@ class Redis(VectorDB):
         self._vector_field = "vector"
         self._label_field = "label"
         self._numeric_field = "metadata"
+        self._np_dtype = np.float16 if db_case_config.use_float16 else np.float32
+        self._redis_type = "FLOAT16" if db_case_config.use_float16 else "FLOAT32"
 
         # Create a redis connection, if db has password configured, add it to the connection here and in init():
         password = self.db_config["password"]
@@ -76,7 +78,7 @@ class Redis(VectorDB):
                     self._vector_field,  # Vector Field Name
                     "HNSW",  # Vector Index Type: FLAT or HNSW
                     {
-                        "TYPE": "FLOAT32",  # FLOAT32 or FLOAT64
+                        "TYPE": self._redis_type,  # FLOAT16, FLOAT32 or FLOAT64
                         "DIM": vector_dimensions,  # Number of Vector Dimensions
                         "DISTANCE_METRIC": "COSINE",  # Vector Search Distance Metric
                         "M": self.case_config.index_param()["params"]["M"],
@@ -128,7 +130,7 @@ class Redis(VectorDB):
         try:
             with self.conn.pipeline(transaction=False) as pipe:
                 for i, embedding in enumerate(embeddings):
-                    ndarr_emb = np.array(embedding).astype(np.float32).tobytes()
+                    ndarr_emb = np.array(embedding).astype(self._np_dtype).tobytes()
                     mapping={
                         self._vector_field: ndarr_emb,
                         self._numeric_field: metadata[i],
@@ -172,7 +174,7 @@ class Redis(VectorDB):
     ) -> list[int]:
         assert self.conn is not None
 
-        query_vector = np.array(query).astype(np.float32).tobytes()
+        query_vector = np.array(query).astype(self._np_dtype).tobytes()
         search_params = self.case_config.search_param()["params"]
         if config_overwrite is not None and "ef" in config_overwrite:
             ef_runtime = config_overwrite["ef"]

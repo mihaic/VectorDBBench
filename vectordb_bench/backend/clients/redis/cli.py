@@ -18,6 +18,15 @@ class RedisTypedDict(TypedDict):
     host: Annotated[str, click.option("--host", type=str, help="Db host", required=True)]
     password: Annotated[str, click.option("--password", type=str, help="Db password")]
     port: Annotated[int, click.option("--port", type=int, default=6379, help="Db Port")]
+    use_float16: Annotated[
+        bool,
+        click.option(
+            "--use-float16/--no-use-float16",
+            is_flag=True,
+            default=False,
+            help="Store and query vectors as FLOAT16 instead of FLOAT32",
+        ),
+    ]
     filtering_batch_size: Annotated[
         int | None,
         click.option(
@@ -92,6 +101,7 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             filtering_batch_size=parameters["filtering_batch_size"],
             calibration_target=parameters.get("calibrate"),
             calibration_param=parameters.get("calibration_param") or "ef",
+            use_float16=parameters["use_float16"],
         ),
         **parameters,
     )
