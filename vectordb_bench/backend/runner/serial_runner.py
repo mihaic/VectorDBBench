@@ -224,9 +224,10 @@ class SerialSearchRunner:
                 and (calibration_target := self.db_case_config.search_param()["params"]["calibration_target"]) is not None
             ):
                 calibration_param = self.db_case_config.search_param()["params"]["calibration_param"]
-                log.info(f"{mp.current_process().name:14} calibrating {calibration_param=} to {calibration_target=}")
-                value, recall = self._calibrate(test_data, ground_truth, calibration_param, self.k, calibration_target)
-                log.info(f"{mp.current_process().name:14} calibrated to {recall=} at {value}")
+                calibration_limit = self.db_case_config.search_param()["params"]["calibration_limit"]
+                log.info(f"{mp.current_process().name:14} calibrating {calibration_param=!s} to {calibration_target=} ({calibration_limit=})")
+                value, recall = self._calibrate(test_data, ground_truth, calibration_param, self.k, calibration_target, calibration_limit)
+                log.info(f"{mp.current_process().name:14} calibrated to {recall=!s} at {value}")
                 config_overwrite = {calibration_param: value}
             else:
                 config_overwrite = None

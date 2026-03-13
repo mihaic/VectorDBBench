@@ -39,6 +39,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     index: IndexType = IndexType.HNSW
     calibration_target: float | None = None
     calibration_param: Literal["ef", "filtering_batch_size"] = "ef"
+    calibration_limit: int = 1000
     use_float16: bool = False
 
     def index_param(self) -> dict:
@@ -55,6 +56,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
                 "ef": self.ef,
                 "calibration_target": self.calibration_target,
                 "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
                 "filtering_batch_size": self.filtering_batch_size,
             },
         }
@@ -73,6 +75,7 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
     index: IndexType = IndexType.SVS_VAMANA
     calibration_target: float | None = None
     calibration_param: Literal["search_window_size", "filtering_batch_size"] = "search_window_size"
+    calibration_limit: int = 1000
     use_float16: bool = False
 
     def index_param(self) -> dict:
@@ -95,6 +98,7 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
                 "search_window_size": self.search_window_size,
                 "calibration_target": self.calibration_target,
                 "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
                 "filtering_batch_size": self.filtering_batch_size,
             },
         }

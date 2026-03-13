@@ -475,6 +475,14 @@ class CommonTypedDict(TypedDict):
             help="Parameter to calibrate to reach the target recall",
         ),
     ]
+    calibration_limit: Annotated[
+        str | None,
+        click.option(
+            "--calibration-limit",
+            default=1000,
+            help="Maximum value for the calibration parameter search",
+        ),
+    ]
 
 
 class HNSWBaseTypedDict(TypedDict):
