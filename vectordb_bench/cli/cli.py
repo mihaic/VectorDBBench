@@ -465,18 +465,18 @@ class CommonTypedDict(TypedDict):
         ),
     ]
     calibrate: Annotated[
-        float | None,
-        click.option("--calibrate", type=float, help="Target recall for calibration"),
+        float,
+        click.option("--calibrate", help="Target recall for calibration"),
     ]
     calibration_param: Annotated[
-        str | None,
+        str,
         click.option(
             "--calibration-param",
             help="Parameter to calibrate to reach the target recall",
         ),
     ]
     calibration_limit: Annotated[
-        str | None,
+        str,
         click.option(
             "--calibration-limit",
             default=1000,
