@@ -149,7 +149,7 @@ class SerialSearchRunner:
         except Exception as e:
             log.warning(f"Serial search failed, retry_idx={retry_idx}, Exception: {e}")
             if retry_idx < config.MAX_SEARCH_RETRY:
-                return self._get_db_search_res(emb=emb, retry_idx=retry_idx + 1)
+                return self._get_db_search_res(emb=emb, retry_idx=retry_idx + 1, config_overwrite=config_overwrite)
 
             msg = f"Serial search failed and retried more than {config.MAX_SEARCH_RETRY} times"
             raise RuntimeError(msg) from e
@@ -273,9 +273,9 @@ class SerialSearchRunner:
             f"p99={p99}, "
             f"p95={p95}"
         )
-        return (avg_recall, avg_ndcg, p99, p95)
+        return (avg_recall, avg_ndcg, p99, p95, config_overwrite)
 
-    def _run_in_subprocess(self) -> tuple[float, float, float, float]:
+    def _run_in_subprocess(self) -> tuple[float, float, float, float, dict | None]:
         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
             future = executor.submit(self.search, (self.test_data, self.ground_truth))
             return future.result()

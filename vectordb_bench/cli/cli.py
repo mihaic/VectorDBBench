@@ -466,7 +466,9 @@ class CommonTypedDict(TypedDict):
     ]
     calibrate: Annotated[
         float,
-        click.option("--calibrate", help="Target recall for calibration"),
+        click.option("--calibrate", help="Target recall for calibration."
+        " Calibrated parameters are used in both serial and concurrent"
+        " search, but calibration is only executed with serial search."),
     ]
     calibration_param: Annotated[
         str,
@@ -476,7 +478,7 @@ class CommonTypedDict(TypedDict):
         ),
     ]
     calibration_limit: Annotated[
-        str,
+        int,
         click.option(
             "--calibration-limit",
             default=1000,

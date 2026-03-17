@@ -210,8 +210,13 @@ class CaseRunner(BaseModel):
                     log.info("Data loading skipped")
             if TaskStage.SEARCH_SERIAL in self.config.stages or TaskStage.SEARCH_CONCURRENT in self.config.stages:
                 self._init_search_runner()
+                if TaskStage.SEARCH_SERIAL in self.config.stages:
+                    search_results =  self._serial_search()
+                    m.recall, m.ndcg, m.serial_latency_p99, m.serial_latency_p95, config_overwrite = search_results
+                else:
+                    config_overwrite = None
                 if TaskStage.SEARCH_CONCURRENT in self.config.stages:
-                    search_results = self._conc_search()
+                    search_results = self._conc_search(config_overwrite)
                     (
                         m.qps,
                         m.conc_num_list,
@@ -220,9 +225,6 @@ class CaseRunner(BaseModel):
                         m.conc_latency_p95_list,
                         m.conc_latency_avg_list,
                     ) = search_results
-                if TaskStage.SEARCH_SERIAL in self.config.stages:
-                    search_results = self._serial_search()
-                    m.recall, m.ndcg, m.serial_latency_p99, m.serial_latency_p95 = search_results
 
         except Exception as e:
             log.warning(f"Failed to run performance case, reason = {e}")
@@ -263,12 +265,12 @@ class CaseRunner(BaseModel):
         finally:
             runner = None
 
-    def _serial_search(self) -> tuple[float, float, float, float]:
+    def _serial_search(self) -> tuple[float, float, float, float, dict | None]:
         """Performance serial tests, search the entire test data once,
         calculate the recall, serial_latency_p99, serial_latency_p95
 
         Returns:
-            tuple[float, float, float, float]: recall, ndcg, serial_latency_p99, serial_latency_p95
+            tuple[float, float, float, float, dict | None]: recall, ndcg, serial_latency_p99, serial_latency_p95, config_overwrite from calibration (if any)
         """
         try:
             results, _ = self.serial_search_runner.run()
@@ -279,7 +281,7 @@ class CaseRunner(BaseModel):
         else:
             return results
 
-    def _conc_search(self):
+    def _conc_search(self, config_overwrite: dict | None = None):
         """Performance concurrency tests, search the test data endlessness
         for 30s in several concurrencies
 
@@ -287,7 +289,7 @@ class CaseRunner(BaseModel):
             float: the largest qps in all concurrencies
         """
         try:
-            return self.search_runner.run()
+            return self.search_runner.run(config_overwrite)
         except Exception as e:
             log.warning(f"search error: {e!s}, {e}")
             raise e from None
