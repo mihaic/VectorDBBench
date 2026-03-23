@@ -174,13 +174,17 @@ class Redis(VectorDB):
 
         query_vector = np.array(query).astype(self._np_dtype).tobytes()
         search_params = self.case_config.search_param()["params"]
-        if config_overwrite is not None and "filtering_batch_size" in config_overwrite:
-            filtering_batch_size = config_overwrite["filtering_batch_size"]
-        else:
-            filtering_batch_size = search_params.get("filtering_batch_size")
         is_filtering = self._filter != "*"
-        if is_filtering and filtering_batch_size is not None:
-            filtering_params = f" HYBRID_POLICY BATCHES BATCH_SIZE {filtering_batch_size}"
+        if is_filtering:
+            if (hybrid_policy := search_params['hybrid_policy']) == "BATCHES":
+                if config_overwrite is not None and "filtering_batch_size" in config_overwrite:
+                    filtering_batch_size = config_overwrite["filtering_batch_size"]
+                else:
+                    filtering_batch_size = search_params.get("filtering_batch_size")
+                filtering_batch_size_params = f" BATCH_SIZE {filtering_batch_size}" if filtering_batch_size is not None else ""
+            else:
+                filtering_batch_size_params = ""
+            filtering_params = f" HYBRID_POLICY {hybrid_policy}{filtering_batch_size_params}"
         else:
             filtering_params = ""
         runtime_param = self.case_config.knn_runtime_param(config_overwrite)

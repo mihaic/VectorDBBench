@@ -64,6 +64,14 @@ class RedisTypedDict(TypedDict):
             help="Cluster Mode Disabled (CMD) for Redis doesn't use Cluster conn",
         ),
     ]
+    hybrid_policy: Annotated[
+        str,
+        click.option(
+            "--hybrid-policy",
+            type=click.Choice(["ADHOC_BF", "BATCHES"]),
+            help="Policy for filtered (or hybrid) search.",
+        ),
+    ]
 
 
 class RedisHNSWTypedDict(CommonTypedDict, RedisTypedDict, HNSWFlavor2): ...

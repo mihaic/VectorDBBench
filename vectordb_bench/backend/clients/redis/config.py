@@ -24,6 +24,11 @@ class RedisIndexConfig(BaseModel):
     """Base config for milvus"""
 
     metric_type: MetricType | None = None
+    use_float16: bool = False
+    filtering_batch_size: int | None = None
+    calibration_target: float | None = None
+    calibration_limit: int = 1000
+    hybrid_policy: Literal["ADHOC_BF", "BATCHES"] = "BATCHES"
 
     def parse_metric(self) -> str:
         if not self.metric_type:
@@ -35,12 +40,8 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
     M: int
     efConstruction: int
     ef: int | None = None
-    filtering_batch_size: int | None = None
     index: IndexType = IndexType.HNSW
-    calibration_target: float | None = None
     calibration_param: Literal["ef", "filtering_batch_size"] = "ef"
-    calibration_limit: int = 1000
-    use_float16: bool = False
 
     def index_param(self) -> dict:
         return {
@@ -58,6 +59,7 @@ class RedisHNSWConfig(RedisIndexConfig, DBCaseConfig):
                 "calibration_param": self.calibration_param,
                 "calibration_limit": self.calibration_limit,
                 "filtering_batch_size": self.filtering_batch_size,
+                "hybrid_policy": self.hybrid_policy,
             },
         }
 
@@ -71,12 +73,8 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
     construction_window_size: int
     search_window_size: int | None = None
     compression: Literal["LeanVec4x8", "LVQ8"] | None = None
-    filtering_batch_size: int | None = None
     index: IndexType = IndexType.SVS_VAMANA
-    calibration_target: float | None = None
     calibration_param: Literal["search_window_size", "filtering_batch_size"] = "search_window_size"
-    calibration_limit: int = 1000
-    use_float16: bool = False
 
     def index_param(self) -> dict:
         params: dict = {
@@ -100,6 +98,7 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
                 "calibration_param": self.calibration_param,
                 "calibration_limit": self.calibration_limit,
                 "filtering_batch_size": self.filtering_batch_size,
+                "hybrid_policy": self.hybrid_policy,
             },
         }
 
