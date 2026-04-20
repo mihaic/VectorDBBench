@@ -73,7 +73,7 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
     construction_window_size: int
     search_window_size: int | None = None
     compression: Literal["LeanVec4x8", "LVQ8"] | None = None
-    index: IndexType = IndexType.SVS_VAMANA
+    index: IndexType = IndexType.SVS_VAMANA_REDIS
     calibration_param: Literal["search_window_size", "filtering_batch_size"] = "search_window_size"
 
     def index_param(self) -> dict:

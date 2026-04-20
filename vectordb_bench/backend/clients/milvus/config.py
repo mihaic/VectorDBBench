@@ -39,6 +39,8 @@ class MilvusIndexConfig(BaseModel):
     index: IndexType
     metric_type: MetricType | None = None
     use_partition_key: bool = False  # for label-filter
+    calibration_target: float | None = None
+    calibration_limit: int = 1000
 
     @property
     def is_gpu_index(self) -> bool:
@@ -71,6 +73,10 @@ class AutoIndexConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
+            "params": {
+                "calibration_target": self.calibration_target,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -79,6 +85,7 @@ class HNSWConfig(MilvusIndexConfig, DBCaseConfig):
     efConstruction: int
     ef: int | None = None
     index: IndexType = IndexType.HNSW
+    calibration_param: str = "ef"
 
     def index_param(self) -> dict:
         return {
@@ -90,7 +97,12 @@ class HNSWConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef},
+            "params": {
+                "ef": self.ef,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -117,7 +129,13 @@ class HNSWSQConfig(HNSWConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef, "refine_k": self.refine_k},
+            "params": {
+                "ef": self.ef,
+                "refine_k": self.refine_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -146,7 +164,13 @@ class HNSWPQConfig(HNSWConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef, "refine_k": self.refine_k},
+            "params": {
+                "ef": self.ef,
+                "refine_k": self.refine_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -172,13 +196,20 @@ class HNSWPRQConfig(HNSWPQConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"ef": self.ef, "refine_k": self.refine_k},
+            "params": {
+                "ef": self.ef,
+                "refine_k": self.refine_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
 class DISKANNConfig(MilvusIndexConfig, DBCaseConfig):
     search_list: int | None = None
     index: IndexType = IndexType.DISKANN
+    calibration_param: str = "search_list"
 
     def index_param(self) -> dict:
         return {
@@ -190,7 +221,12 @@ class DISKANNConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"search_list": self.search_list},
+            "params": {
+                "search_list": self.search_list,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -198,6 +234,7 @@ class IVFFlatConfig(MilvusIndexConfig, DBCaseConfig):
     nlist: int
     nprobe: int | None = None
     index: IndexType = IndexType.IVFFlat
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -209,7 +246,12 @@ class IVFFlatConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe},
+            "params": {
+                "nprobe": self.nprobe,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -219,6 +261,7 @@ class IVFPQConfig(MilvusIndexConfig, DBCaseConfig):
     m: int = 32
     nbits: int = 8
     index: IndexType = IndexType.IVFPQ
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -230,7 +273,12 @@ class IVFPQConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe},
+            "params": {
+                "nprobe": self.nprobe,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -238,6 +286,7 @@ class IVFSQ8Config(MilvusIndexConfig, DBCaseConfig):
     nlist: int
     nprobe: int | None = None
     index: IndexType = IndexType.IVFSQ8
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -249,7 +298,12 @@ class IVFSQ8Config(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe},
+            "params": {
+                "nprobe": self.nprobe,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -274,7 +328,14 @@ class IVFRABITQConfig(IVFSQ8Config):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe, "rbq_bits_query": self.rbq_bits_query, "refine_k": self.refine_k},
+            "params": {
+                "nprobe": self.nprobe,
+                "rbq_bits_query": self.rbq_bits_query,
+                "refine_k": self.refine_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -291,7 +352,10 @@ class FLATConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {},
+            "params": {
+                "calibration_target": self.calibration_target,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -301,6 +365,7 @@ class GPUIVFFlatConfig(MilvusIndexConfig, DBCaseConfig):
     cache_dataset_on_device: str
     refine_ratio: float | None = None
     index: IndexType = IndexType.GPU_IVF_FLAT
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -315,7 +380,13 @@ class GPUIVFFlatConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe, "refine_ratio": self.refine_ratio},
+            "params": {
+                "nprobe": self.nprobe,
+                "refine_ratio": self.refine_ratio,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -344,6 +415,8 @@ class GPUBruteForceConfig(MilvusIndexConfig, DBCaseConfig):
             "params": {
                 "nprobe": 1,  # For GPU_BRUTE_FORCE, set nprobe to 1 (brute force search)
                 "limit": self.limit,  # Top-k for search
+                "calibration_target": self.calibration_target,
+                "calibration_limit": self.calibration_limit,
             },
         }
 
@@ -356,6 +429,7 @@ class GPUIVFPQConfig(MilvusIndexConfig, DBCaseConfig):
     refine_ratio: float | None = None
     cache_dataset_on_device: str
     index: IndexType = IndexType.GPU_IVF_PQ
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -372,7 +446,13 @@ class GPUIVFPQConfig(MilvusIndexConfig, DBCaseConfig):
     def search_param(self) -> dict:
         return {
             "metric_type": self.parse_metric(),
-            "params": {"nprobe": self.nprobe, "refine_ratio": self.refine_ratio},
+            "params": {
+                "nprobe": self.nprobe,
+                "refine_ratio": self.refine_ratio,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
         }
 
 
@@ -388,6 +468,7 @@ class GPUCAGRAConfig(MilvusIndexConfig, DBCaseConfig):
     cache_dataset_on_device: str
     refine_ratio: float | None = None
     index: IndexType = IndexType.GPU_CAGRA
+    calibration_param: str = "itopk_size"
 
     def index_param(self) -> dict:
         return {
@@ -411,6 +492,9 @@ class GPUCAGRAConfig(MilvusIndexConfig, DBCaseConfig):
                 "min_iterations": self.min_iterations,
                 "max_iterations": self.max_iterations,
                 "refine_ratio": self.refine_ratio,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
             },
         }
 
@@ -421,6 +505,7 @@ class SCANNConfig(MilvusIndexConfig, DBCaseConfig):
     nprobe: int = 64
     reorder_k: int | None = 100
     index: IndexType = IndexType.SCANN_MILVUS
+    calibration_param: str = "nprobe"
 
     def index_param(self) -> dict:
         return {
@@ -438,6 +523,9 @@ class SCANNConfig(MilvusIndexConfig, DBCaseConfig):
             "params": {
                 "nprobe": self.nprobe,
                 "reorder_k": self.reorder_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
             },
         }
 
@@ -450,6 +538,7 @@ class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
     svs_search_window_size: int | None = None
     svs_search_buffer_capacity: int | None = None
     index: IndexType = IndexType.SVS_VAMANA
+    calibration_param: str = "svs_search_window_size"
 
     def index_param(self) -> dict:
         params = {
@@ -471,6 +560,9 @@ class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
             "params": {
                 "svs_search_window_size": self.svs_search_window_size,
                 "svs_search_buffer_capacity": self.svs_search_buffer_capacity,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
             },
         }
 

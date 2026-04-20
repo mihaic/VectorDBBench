@@ -78,6 +78,8 @@ def ZillizAutoIndex(**parameters: Unpack[ZillizTypedDict]):
         db_case_config=AutoIndexConfig(
             level=int(parameters["level"]) if parameters["level"] else 1,
             num_shards=parameters["num_shards"],
+            calibration_target=parameters["calibrate"],
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )

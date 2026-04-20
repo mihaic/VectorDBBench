@@ -38,5 +38,7 @@ class AutoIndexConfig(MilvusIndexConfig, DBCaseConfig):
             "metric_type": self.parse_metric(),
             "params": {
                 "level": self.level,
+                "calibration_target": self.calibration_target,
+                "calibration_limit": self.calibration_limit,
             },
         }

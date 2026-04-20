@@ -71,7 +71,10 @@ def MilvusAutoIndex(**parameters: Unpack[MilvusAutoIndexTypedDict]):
             num_shards=int(parameters["num_shards"]),
             replica_number=int(parameters["replica_number"]),
         ),
-        db_case_config=AutoIndexConfig(),
+        db_case_config=AutoIndexConfig(
+            calibration_target=parameters["calibrate"],
+            calibration_limit=parameters["calibration_limit"],
+        ),
         **parameters,
     )
 
@@ -91,7 +94,10 @@ def MilvusFlat(**parameters: Unpack[MilvusAutoIndexTypedDict]):
             num_shards=int(parameters["num_shards"]),
             replica_number=int(parameters["replica_number"]),
         ),
-        db_case_config=FLATConfig(),
+        db_case_config=FLATConfig(
+            calibration_target=parameters["calibrate"],
+            calibration_limit=parameters["calibration_limit"],
+        ),
         **parameters,
     )
 
@@ -118,6 +124,9 @@ def MilvusHNSW(**parameters: Unpack[MilvusHNSWTypedDict]):
             M=parameters["m"],
             efConstruction=parameters["ef_construction"],
             ef=parameters["ef_search"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "ef",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -187,6 +196,9 @@ def MilvusHNSWPQ(**parameters: Unpack[MilvusHNSWPQTypedDict]):
             refine=parameters["refine"],
             refine_type=parameters["refine_type"],
             refine_k=parameters["refine_k"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "ef",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -232,6 +244,9 @@ def MilvusHNSWPRQ(**parameters: Unpack[MilvusHNSWPRQTypedDict]):
             refine_type=parameters["refine_type"],
             refine_k=parameters["refine_k"],
             nrq=parameters["nrq"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "ef",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -272,6 +287,9 @@ def MilvusHNSWSQ(**parameters: Unpack[MilvusHNSWSQTypedDict]):
             refine=parameters["refine"],
             refine_type=parameters["refine_type"],
             refine_k=parameters["refine_k"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "ef",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -298,6 +316,9 @@ def MilvusIVFFlat(**parameters: Unpack[MilvusIVFFlatTypedDict]):
         db_case_config=IVFFlatConfig(
             nlist=parameters["nlist"],
             nprobe=parameters["nprobe"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "nprobe",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -321,6 +342,9 @@ def MilvusIVFSQ8(**parameters: Unpack[MilvusIVFFlatTypedDict]):
         db_case_config=IVFSQ8Config(
             nlist=parameters["nlist"],
             nprobe=parameters["nprobe"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "nprobe",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -387,6 +411,9 @@ def MilvusIVFRabitQ(**parameters: Unpack[MilvusIVFRABITQTypedDict]):
             refine=parameters["refine"],
             refine_type=parameters["refine_type"],
             refine_k=parameters["refine_k"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "nprobe",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -413,6 +440,9 @@ def MilvusDISKANN(**parameters: Unpack[MilvusDISKANNTypedDict]):
         ),
         db_case_config=DISKANNConfig(
             search_list=parameters["search_list"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "search_list",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -446,6 +476,9 @@ def MilvusGPUIVFFlat(**parameters: Unpack[MilvusGPUIVFTypedDict]):
             nprobe=parameters["nprobe"],
             cache_dataset_on_device=parameters["cache_dataset_on_device"],
             refine_ratio=parameters.get("refine_ratio"),
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "nprobe",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -480,6 +513,8 @@ def MilvusGPUBruteForce(**parameters: Unpack[MilvusGPUBruteForceTypedDict]):
         db_case_config=GPUBruteForceConfig(
             metric_type=parameters["metric_type"],
             limit=parameters["limit"],  # top-k for search
+            calibration_target=parameters["calibrate"],
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -574,6 +609,9 @@ def MilvusSVSVamana(**parameters: Unpack[MilvusSVSVamanaTypedDict]):
             svs_storage_kind=parameters["svs_storage_kind"],
             svs_search_window_size=parameters["svs_search_window_size"],
             svs_search_buffer_capacity=parameters["svs_search_buffer_capacity"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "svs_search_window_size",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -601,6 +639,9 @@ def MilvusSVSVamanaLVQ(**parameters: Unpack[MilvusSVSVamanaTypedDict]):
             svs_storage_kind=parameters["svs_storage_kind"],
             svs_search_window_size=parameters["svs_search_window_size"],
             svs_search_buffer_capacity=parameters["svs_search_buffer_capacity"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "svs_search_window_size",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -643,6 +684,9 @@ def MilvusSVSVamanaLeanVec(**parameters: Unpack[MilvusSVSVamanaLeanVecTypedDict]
             svs_search_window_size=parameters["svs_search_window_size"],
             svs_search_buffer_capacity=parameters["svs_search_buffer_capacity"],
             svs_leanvec_dim=parameters["svs_leanvec_dim"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "svs_search_window_size",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -680,6 +724,9 @@ def MilvusGPUIVFPQ(**parameters: Unpack[MilvusGPUIVFPQTypedDict]):
             nbits=parameters["nbits"],
             cache_dataset_on_device=parameters["cache_dataset_on_device"],
             refine_ratio=parameters["refine_ratio"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "nprobe",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )
@@ -725,6 +772,9 @@ def MilvusGPUCAGRA(**parameters: Unpack[MilvusGPUCAGRATypedDict]):
             build_algo=parameters["build_algo"],
             cache_dataset_on_device=parameters["cache_dataset_on_device"],
             refine_ratio=parameters["refine_ratio"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "itopk_size",
+            calibration_limit=parameters["calibration_limit"],
         ),
         **parameters,
     )

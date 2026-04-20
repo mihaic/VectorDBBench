@@ -250,15 +250,20 @@ class Milvus(VectorDB):
         query: list[float],
         k: int = 100,
         timeout: int | None = None,
+        config_overwrite: dict[str, int] | None = None,
     ) -> list[int]:
         """Perform a search on a query embedding and return results."""
         assert self.client is not None
+
+        search_params = self.case_config.search_param()
+        if config_overwrite:
+            search_params["params"] = {**search_params.get("params", {}), **config_overwrite}
 
         res = self.client.search(
             collection_name=self.collection_name,
             data=[query],
             anns_field=self._vector_field,
-            search_params=self.case_config.search_param(),
+            search_params=search_params,
             limit=k,
             filter=self.expr,
         )
