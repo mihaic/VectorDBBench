@@ -576,10 +576,10 @@ class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
 
     def adjust_search_params(self, params: dict) -> dict:
         """Ensure svs_search_buffer_capacity is at least svs_search_window_size."""
-        sws = params.get("svs_search_window_size")
-        sbc = params.get("svs_search_buffer_capacity")
-        if sws is not None and (sbc is None or sbc < sws):
-            params["svs_search_buffer_capacity"] = sws
+        search_window_size = params.get("svs_search_window_size")
+        buffer_capacity = params.get("svs_search_buffer_capacity")
+        if search_window_size is not None and (buffer_capacity is None or buffer_capacity < search_window_size):
+            params["svs_search_buffer_capacity"] = search_window_size
         return params
 
 
