@@ -59,6 +59,14 @@ class MilvusIndexConfig(BaseModel):
             return MetricType.L2.value
         return self.metric_type.value
 
+    def adjust_search_params(self, params: dict) -> dict:
+        """Adjust and validate the final search params before sending to Milvus.
+
+        Subclasses can override this to enforce constraints between parameters
+        (e.g., ensuring one param is at least as large as another).
+        """
+        return params
+
 
 class AutoIndexConfig(MilvusIndexConfig, DBCaseConfig):
     index: IndexType = IndexType.AUTOINDEX
@@ -565,6 +573,14 @@ class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
                 "calibration_limit": self.calibration_limit,
             },
         }
+
+    def adjust_search_params(self, params: dict) -> dict:
+        """Ensure svs_search_buffer_capacity is at least svs_search_window_size."""
+        sws = params.get("svs_search_window_size")
+        sbc = params.get("svs_search_buffer_capacity")
+        if sws is not None and (sbc is None or sbc < sws):
+            params["svs_search_buffer_capacity"] = sws
+        return params
 
 
 class SVSVamanaLVQConfig(SVSVamanaConfig):

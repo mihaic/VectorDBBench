@@ -256,8 +256,10 @@ class Milvus(VectorDB):
         assert self.client is not None
 
         search_params = self.case_config.search_param()
+        params = search_params.get("params", {})
         if config_overwrite:
-            search_params["params"] = {**search_params.get("params", {}), **config_overwrite}
+            params = {**params, **config_overwrite}
+        search_params["params"] = self.case_config.adjust_search_params(params)
 
         res = self.client.search(
             collection_name=self.collection_name,
