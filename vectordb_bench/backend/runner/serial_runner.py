@@ -167,7 +167,7 @@ class SerialSearchRunner:
         recall: float,
         max_value: int = 1000,
         extra_params: dict[str, tuple[CalibrationType, float | int]] | None = None,
-    ) -> tuple[int, float]:
+    ) -> tuple[int, float, float]:
         """Calibrate search for a given recall target.
 
         Args:
@@ -175,6 +175,10 @@ class SerialSearchRunner:
                 Each entry maps a param name to (CalibrationType, value).
                 MULTIPLIER entries are computed as int(current * value) at every binary-search step.
                 ABSOLUTE entries are applied as-is at every step.
+
+        Returns:
+            (calibrated_value, achieved_recall, avg_latency) where avg_latency is the
+            average query latency measured at the final calibrated parameter value.
         """
         if min_value > max_value:
             raise ValueError(
@@ -187,8 +191,11 @@ class SerialSearchRunner:
         current = (lower_bound + upper_bound) // 2
         previous = current
         current_recall = 0
+        current_avg_latency = 0.0
+        previous_avg_latency = 0.0
         while True:
             previous_recall = current_recall
+            previous_avg_latency = current_avg_latency
             config_overwrite = {calibration_param: current}
             if extra_params:
                 for param_name, (param_type, param_value) in extra_params.items():
@@ -197,13 +204,16 @@ class SerialSearchRunner:
                     else:
                         config_overwrite[param_name] = param_value
             recalls = []
+            latencies = []
             for idx, emb in enumerate(test_data):
                 s = time.perf_counter()
                 results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
+                latencies.append(time.perf_counter() - s)
                 recalls.append(calc_recall(self.k, ground_truth[idx][: self.k], results))
-            current_recall = np.mean(recalls)
+            current_recall = float(np.mean(recalls))
+            current_avg_latency = float(np.mean(latencies))
             if np.isclose(current_recall, recall):
-                return current, current_recall
+                return current, current_recall, current_avg_latency
             if current_recall > recall:
                 upper_bound = current
                 upper_bound_visited = True
@@ -216,12 +226,9 @@ class SerialSearchRunner:
                 or (upper_bound_visited and next_value == upper_bound)
             ):
                 if abs(previous_recall - recall) < abs(current_recall - recall):
-                    final_recall = previous_recall
-                    final_value = previous
+                    return previous, previous_recall, previous_avg_latency
                 else:
-                    final_recall = current_recall
-                    final_value = current
-                return final_value, final_recall
+                    return current, current_recall, current_avg_latency
             previous = current
             current = next_value
 
@@ -324,9 +331,6 @@ class SerialSearchRunner:
             log.debug(f"ground truth size: {len(ground_truth)}")
 
             config_overwrite: dict | None = None
-            best_latencies: list[float] | None = None
-            best_recalls: list[float] | None = None
-            best_ndcgs: list[float] | None = None
 
             if (
                 ground_truth is not None
@@ -337,60 +341,29 @@ class SerialSearchRunner:
                 extra_params_spec = getattr(self.db_case_config, "calibration_extra_params", None)
                 combos = self._generate_extra_param_combos(extra_params_spec)
 
-                if len(combos) == 1:
-                    # Single combo (no extra params or a single combination) — original behaviour.
-                    combo = combos[0]
+                best_avg_latency = math.inf
+                for combo_idx, combo in enumerate(combos):
                     log.info(
-                        f"{mp.current_process().name:14} calibrating {calibration_param=!s} "
-                        f"to {calibration_target=} ({calibration_limit=})"
+                        f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
+                        f"{calibration_param=!s} to {calibration_target=} ({calibration_limit=})"
+                        + (f", extra={combo}" if combo else "")
                     )
-                    value, recall = self._calibrate(
+                    value, recall, avg_latency = self._calibrate(
                         test_data, ground_truth, calibration_param, self.k,
                         calibration_target, calibration_limit, extra_params=combo,
                     )
-                    log.info(f"{mp.current_process().name:14} calibrated to {recall=!s} at {value}")
-                    config_overwrite = self._resolve_extra_params(calibration_param, value, combo)
-                else:
-                    # Multiple combinations — calibrate each and select the one with the
-                    # lowest average latency that still meets the recall target.
-                    best_avg_latency = math.inf
-                    for combo_idx, combo in enumerate(combos):
-                        log.info(
-                            f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
-                            f"{calibration_param=!s} to {calibration_target=} "
-                            f"({calibration_limit=}), extra={combo}"
-                        )
-                        value, recall = self._calibrate(
-                            test_data, ground_truth, calibration_param, self.k,
-                            calibration_target, calibration_limit, extra_params=combo,
-                        )
-                        resolved = self._resolve_extra_params(calibration_param, value, combo)
-                        log.info(
-                            f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
-                            f"calibrated to {recall=!s} at {value}, benchmarking {resolved}"
-                        )
-                        latencies, recalls_list, ndcgs_list = self._run_search_sweep(
-                            test_data, ground_truth, ideal_dcg, resolved,
-                        )
-                        avg_latency = float(np.mean(latencies))
-                        log.info(
-                            f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
-                            f"avg_latency={avg_latency:.4f}"
-                        )
-                        if avg_latency < best_avg_latency:
-                            best_avg_latency = avg_latency
-                            config_overwrite = resolved
-                            best_latencies = latencies
-                            best_recalls = recalls_list
-                            best_ndcgs = ndcgs_list
+                    resolved = self._resolve_extra_params(calibration_param, value, combo)
+                    log.info(
+                        f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
+                        f"calibrated to {recall=!s} at {value}, {avg_latency=:.4f}, params={resolved}"
+                    )
+                    if avg_latency < best_avg_latency:
+                        best_avg_latency = avg_latency
+                        config_overwrite = resolved
 
-            if best_latencies is None:
-                # No multi-combo sweep was done — run the final search sweep now.
-                latencies, recalls_list, ndcgs_list = self._run_search_sweep(
-                    test_data, ground_truth, ideal_dcg, config_overwrite,
-                )
-            else:
-                latencies, recalls_list, ndcgs_list = best_latencies, best_recalls, best_ndcgs
+            latencies, recalls_list, ndcgs_list = self._run_search_sweep(
+                test_data, ground_truth, ideal_dcg, config_overwrite,
+            )
 
         avg_latency = round(np.mean(latencies), 4)
         avg_recall = round(np.mean(recalls_list), 4)
