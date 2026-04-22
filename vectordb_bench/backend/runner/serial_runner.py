@@ -353,7 +353,7 @@ class SerialSearchRunner:
                 else:
                     # Multiple combinations — calibrate each and select the one with the
                     # lowest average latency that still meets the recall target.
-                    best_avg_latency = float("inf")
+                    best_avg_latency = math.inf
                     for combo_idx, combo in enumerate(combos):
                         log.info(
                             f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
