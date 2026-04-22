@@ -1,4 +1,5 @@
 import concurrent.futures
+import itertools
 import logging
 import math
 import multiprocessing as mp
@@ -15,6 +16,7 @@ from ...metric import calc_ndcg, calc_recall, get_ideal_dcg
 from ...models import LoadTimeoutError
 from .. import utils
 from ..clients import api
+from ..clients.api import CalibrationType
 
 NUM_PER_BATCH = config.NUM_PER_BATCH
 LOAD_MAX_TRY_COUNT = config.LOAD_MAX_TRY_COUNT
@@ -164,8 +166,16 @@ class SerialSearchRunner:
         min_value: int,
         recall: float,
         max_value: int = 1000,
+        extra_params: dict[str, tuple[CalibrationType, float | int]] | None = None,
     ) -> tuple[int, float]:
-        """Calibrate search for a given recall target."""
+        """Calibrate search for a given recall target.
+
+        Args:
+            extra_params: optional per-step overrides applied alongside the calibration param.
+                Each entry maps a param name to (CalibrationType, value).
+                MULTIPLIER entries are computed as int(current * value) at every binary-search step.
+                ABSOLUTE entries are applied as-is at every step.
+        """
         if min_value > max_value:
             raise ValueError(
                 f"{min_value=} cannot be greater than {max_value=}"
@@ -180,6 +190,12 @@ class SerialSearchRunner:
         while True:
             previous_recall = current_recall
             config_overwrite = {calibration_param: current}
+            if extra_params:
+                for param_name, (param_type, param_value) in extra_params.items():
+                    if param_type == CalibrationType.MULTIPLIER:
+                        config_overwrite[param_name] = int(current * param_value)
+                    else:
+                        config_overwrite[param_name] = param_value
             recalls = []
             for idx, emb in enumerate(test_data):
                 s = time.perf_counter()
@@ -209,6 +225,94 @@ class SerialSearchRunner:
             previous = current
             current = next_value
 
+    @staticmethod
+    def _generate_extra_param_combos(
+        extra_params_spec: dict[str, tuple[CalibrationType, tuple[float | int, ...]]] | None,
+    ) -> list[dict[str, tuple[CalibrationType, float | int]] | None]:
+        """Expand a per-parameter value spec into a flat list of single-value combinations.
+
+        Each entry in the spec maps a parameter name to (CalibrationType, (v1, v2, ...)).
+        The returned list contains one dict per Cartesian-product combination, where each
+        dict maps a parameter name to (CalibrationType, single_value).
+
+        Returns ``[None]`` when *extra_params_spec* is empty or ``None``, meaning "run
+        calibration once with no extra parameter overrides".
+        """
+        if not extra_params_spec:
+            return [None]
+
+        param_names = list(extra_params_spec.keys())
+        per_param_choices: list[list[tuple[CalibrationType, float | int]]] = []
+        for name in param_names:
+            param_type, values = extra_params_spec[name]
+            per_param_choices.append([(param_type, v) for v in values])
+
+        combos = []
+        for prod in itertools.product(*per_param_choices):
+            combo: dict[str, tuple[CalibrationType, float | int]] = {
+                name: prod[i] for i, name in enumerate(param_names)
+            }
+            combos.append(combo)
+        return combos
+
+    @staticmethod
+    def _resolve_extra_params(
+        calibration_param: str,
+        calibrated_value: int,
+        extra_params: dict[str, tuple[CalibrationType, float | int]] | None,
+    ) -> dict[str, int | float]:
+        """Build the final config_overwrite dict for a calibrated value + extra params combo.
+
+        MULTIPLIER entries are computed as ``int(calibrated_value * multiplier)``.
+        ABSOLUTE entries are used as-is.
+        """
+        result: dict[str, int | float] = {calibration_param: calibrated_value}
+        if extra_params:
+            for param_name, (param_type, param_value) in extra_params.items():
+                if param_type == CalibrationType.MULTIPLIER:
+                    result[param_name] = int(calibrated_value * param_value)
+                else:
+                    result[param_name] = param_value
+        return result
+
+    def _run_search_sweep(
+        self,
+        test_data: list,
+        ground_truth: list[list[int]] | None,
+        ideal_dcg: float,
+        config_overwrite: dict | None,
+    ) -> tuple[list[float], list[float], list[float]]:
+        """Run the full test-data search with *config_overwrite* and return raw metric lists.
+
+        Returns:
+            (latencies, recalls, ndcgs) – one value per query.
+        """
+        latencies, recalls, ndcgs = [], [], []
+        for idx, emb in enumerate(test_data):
+            s = time.perf_counter()
+            try:
+                results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
+            except Exception as e:
+                log.warning(f"VectorDB search_embedding error: {e}")
+                raise e from None
+
+            latencies.append(time.perf_counter() - s)
+
+            if ground_truth is not None:
+                gt = ground_truth[idx]
+                recalls.append(calc_recall(self.k, gt[: self.k], results))
+                ndcgs.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
+            else:
+                recalls.append(0)
+                ndcgs.append(0)
+
+            if len(latencies) % 100 == 0:
+                log.debug(
+                    f"({mp.current_process().name:14}) search_count={len(latencies):3}, "
+                    f"latest_latency={latencies[-1]}, latest recall={recalls[-1]}"
+                )
+        return latencies, recalls, ndcgs
+
     def search(self, args: tuple[list, list[list[int]]]) -> tuple[float, float, float, float]:
         log.info(f"{mp.current_process().name:14} start search the entire test_data to get recall and latency")
         with self.db.init():
@@ -219,47 +323,78 @@ class SerialSearchRunner:
             log.debug(f"test dataset size: {len(test_data)}")
             log.debug(f"ground truth size: {len(ground_truth)}")
 
+            config_overwrite: dict | None = None
+            best_latencies: list[float] | None = None
+            best_recalls: list[float] | None = None
+            best_ndcgs: list[float] | None = None
+
             if (
                 ground_truth is not None
                 and (calibration_target := self.db_case_config.search_param()["params"]["calibration_target"]) is not None
             ):
                 calibration_param = self.db_case_config.search_param()["params"]["calibration_param"]
                 calibration_limit = self.db_case_config.search_param()["params"]["calibration_limit"]
-                log.info(f"{mp.current_process().name:14} calibrating {calibration_param=!s} to {calibration_target=} ({calibration_limit=})")
-                value, recall = self._calibrate(test_data, ground_truth, calibration_param, self.k, calibration_target, calibration_limit)
-                log.info(f"{mp.current_process().name:14} calibrated to {recall=!s} at {value}")
-                config_overwrite = {calibration_param: value}
-            else:
-                config_overwrite = None
+                extra_params_spec = getattr(self.db_case_config, "calibration_extra_params", None)
+                combos = self._generate_extra_param_combos(extra_params_spec)
 
-            latencies, recalls, ndcgs = [], [], []
-            for idx, emb in enumerate(test_data):
-                s = time.perf_counter()
-                try:
-                    results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
-                except Exception as e:
-                    log.warning(f"VectorDB search_embedding error: {e}")
-                    raise e from None
-
-                latencies.append(time.perf_counter() - s)
-
-                if ground_truth is not None:
-                    gt = ground_truth[idx]
-                    recalls.append(calc_recall(self.k, gt[: self.k], results))
-                    ndcgs.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
-                else:
-                    recalls.append(0)
-                    ndcgs.append(0)
-
-                if len(latencies) % 100 == 0:
-                    log.debug(
-                        f"({mp.current_process().name:14}) search_count={len(latencies):3}, "
-                        f"latest_latency={latencies[-1]}, latest recall={recalls[-1]}"
+                if len(combos) == 1:
+                    # Single combo (no extra params or a single combination) — original behaviour.
+                    combo = combos[0]
+                    log.info(
+                        f"{mp.current_process().name:14} calibrating {calibration_param=!s} "
+                        f"to {calibration_target=} ({calibration_limit=})"
                     )
+                    value, recall = self._calibrate(
+                        test_data, ground_truth, calibration_param, self.k,
+                        calibration_target, calibration_limit, extra_params=combo,
+                    )
+                    log.info(f"{mp.current_process().name:14} calibrated to {recall=!s} at {value}")
+                    config_overwrite = self._resolve_extra_params(calibration_param, value, combo)
+                else:
+                    # Multiple combinations — calibrate each and select the one with the
+                    # lowest average latency that still meets the recall target.
+                    best_avg_latency = float("inf")
+                    for combo_idx, combo in enumerate(combos):
+                        log.info(
+                            f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
+                            f"{calibration_param=!s} to {calibration_target=} "
+                            f"({calibration_limit=}), extra={combo}"
+                        )
+                        value, recall = self._calibrate(
+                            test_data, ground_truth, calibration_param, self.k,
+                            calibration_target, calibration_limit, extra_params=combo,
+                        )
+                        resolved = self._resolve_extra_params(calibration_param, value, combo)
+                        log.info(
+                            f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
+                            f"calibrated to {recall=!s} at {value}, benchmarking {resolved}"
+                        )
+                        latencies, recalls_list, ndcgs_list = self._run_search_sweep(
+                            test_data, ground_truth, ideal_dcg, resolved,
+                        )
+                        avg_latency = float(np.mean(latencies))
+                        log.info(
+                            f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
+                            f"avg_latency={avg_latency:.4f}"
+                        )
+                        if avg_latency < best_avg_latency:
+                            best_avg_latency = avg_latency
+                            config_overwrite = resolved
+                            best_latencies = latencies
+                            best_recalls = recalls_list
+                            best_ndcgs = ndcgs_list
+
+            if best_latencies is None:
+                # No multi-combo sweep was done — run the final search sweep now.
+                latencies, recalls_list, ndcgs_list = self._run_search_sweep(
+                    test_data, ground_truth, ideal_dcg, config_overwrite,
+                )
+            else:
+                latencies, recalls_list, ndcgs_list = best_latencies, best_recalls, best_ndcgs
 
         avg_latency = round(np.mean(latencies), 4)
-        avg_recall = round(np.mean(recalls), 4)
-        avg_ndcg = round(np.mean(ndcgs), 4)
+        avg_recall = round(np.mean(recalls_list), 4)
+        avg_ndcg = round(np.mean(ndcgs_list), 4)
         cost = round(np.sum(latencies), 4)
         p99 = round(np.percentile(latencies, 99), 4)
         p95 = round(np.percentile(latencies, 95), 4)

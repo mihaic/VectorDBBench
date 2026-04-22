@@ -1,6 +1,6 @@
 from pydantic import BaseModel, SecretStr, model_validator
 
-from ..api import DBCaseConfig, DBConfig, IndexType, MetricType, SQType
+from ..api import CalibrationType, DBCaseConfig, DBConfig, IndexType, MetricType, SQType
 
 
 class MilvusConfig(DBConfig):
@@ -41,6 +41,7 @@ class MilvusIndexConfig(BaseModel):
     use_partition_key: bool = False  # for label-filter
     calibration_target: float | None = None
     calibration_limit: int = 1000
+    calibration_extra_params: dict[str, tuple[CalibrationType, tuple[float | int, ...]]] | None = None
 
     @property
     def is_gpu_index(self) -> bool:

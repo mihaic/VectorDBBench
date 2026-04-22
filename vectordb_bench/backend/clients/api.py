@@ -7,6 +7,11 @@ from pydantic import BaseModel, model_validator
 from vectordb_bench.backend.filter import Filter, FilterOp
 
 
+class CalibrationType(StrEnum):
+    MULTIPLIER = "MULTIPLIER"
+    ABSOLUTE = "ABSOLUTE"
+
+
 class MetricType(StrEnum):
     L2 = "L2"
     COSINE = "COSINE"
