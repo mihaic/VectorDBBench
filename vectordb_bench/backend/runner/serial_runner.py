@@ -300,7 +300,7 @@ class SerialSearchRunner:
                 best_config_overwrite = None
                 for combo_idx, combo in enumerate(combos):
                     log.info(
-                        f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
+                        f"calibrating combo {combo_idx + 1}/{len(combos)}: "
                         f"{calibration_param=!s} to {calibration_target=} ({calibration_limit=})"
                         + (f", extra={combo}" if combo else "")
                     )
@@ -310,13 +310,14 @@ class SerialSearchRunner:
                     )
                     current_config_overwrite = self._resolve_extra_params(calibration_param, value, combo)
                     log.info(
-                        f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
-                        f"calibrated to {recall=!s} at {value}, {avg_latency=:.4f}, params={current_config_overwrite}"
+                        f"calibrated combo {combo_idx + 1}/{len(combos)}: "
+                        f"{recall=!s} at {value}, {avg_latency=}, params={current_config_overwrite}"
                     )
                     if avg_latency < best_avg_latency:
                         best_avg_latency = avg_latency
                         best_config_overwrite = current_config_overwrite
                 config_overwrite = best_config_overwrite
+                log.info(f"calibration complete, {best_config_overwrite=}, {best_avg_latency=}")
             else:
                 config_overwrite = None
 
