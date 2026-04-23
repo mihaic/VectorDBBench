@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -48,6 +49,18 @@ def click_get_defaults_from_file(ctx, param, value):  # noqa: ANN001, ARG001
             msg = f"Failed to load config file: {e}"
             raise click.BadParameter(msg) from e
     return value
+
+
+def parse_calibration_extra_params(value: str | None) -> dict | None:
+    """Parse a JSON string into the calibration_extra_params dict expected by config objects.
+
+    The JSON format is: ``{"param_name": ["TYPE", [v1, v2, ...]]}`` where ``TYPE``
+    is ``"MULTIPLIER"`` or ``"ABSOLUTE"``.  Pydantic will coerce the lists to
+    tuples and the type string to :class:`CalibrationType` on the config model.
+    """
+    if not value:
+        return None
+    return json.loads(value)
 
 
 def click_parameter_decorators_from_typed_dict(
@@ -483,6 +496,15 @@ class CommonTypedDict(TypedDict):
             "--calibration-limit",
             default=1000,
             help="Maximum value for the calibration parameter search",
+        ),
+    ]
+    calibration_extra_params: Annotated[
+        str | None,
+        click.option(
+            "--calibration-extra-params",
+            help='Extra parameters to sweep during calibration, as a JSON object mapping each parameter name to '
+                 '[type, [values]] where type is "MULTIPLIER" or "ABSOLUTE". '
+                 'Example: \'{"search_buffer_capacity": ["MULTIPLIER", [1.5, 2.0]]}\'',
         ),
     ]
 

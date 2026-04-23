@@ -9,6 +9,7 @@ from vectordb_bench.cli.cli import (
     CommonTypedDict,
     cli,
     click_parameter_decorators_from_typed_dict,
+    parse_calibration_extra_params,
     run,
 )
 
@@ -80,6 +81,7 @@ def ZillizAutoIndex(**parameters: Unpack[ZillizTypedDict]):
             num_shards=parameters["num_shards"],
             calibration_target=parameters["calibrate"],
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )

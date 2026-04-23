@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, SecretStr
 
-from ..api import DBCaseConfig, DBConfig, IndexType, MetricType
+from ..api import CalibrationType, DBCaseConfig, DBConfig, IndexType, MetricType
 
 SVS_VAMANA_COMPRESSION_OPTIONS = ["LeanVec4x8", "LVQ8"]
 
@@ -28,6 +28,7 @@ class RedisIndexConfig(BaseModel):
     filtering_batch_size: int | None = None
     calibration_target: float | None = None
     calibration_limit: int = 1000
+    calibration_extra_params: dict[str, tuple[CalibrationType, tuple[float | int, ...]]] | None = None
     hybrid_policy: Literal["ADHOC_BF", "BATCHES"] = "BATCHES"
 
     def parse_metric(self) -> str:

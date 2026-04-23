@@ -8,6 +8,7 @@ from ....cli.cli import (
     HNSWFlavor2,
     cli,
     click_parameter_decorators_from_typed_dict,
+    parse_calibration_extra_params,
     run,
 )
 from .. import DB
@@ -140,6 +141,7 @@ def Redis(**parameters: Unpack[RedisHNSWTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "ef",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
             use_float16=parameters["use_float16"],
         ),
         **parameters,
@@ -171,6 +173,7 @@ def RedisSVSVAMANA(**parameters: Unpack[RedisSVSVAMANATypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "search_window_size",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
             use_float16=parameters["use_float16"],
         ),
         **parameters,

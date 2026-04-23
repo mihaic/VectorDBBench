@@ -10,6 +10,7 @@ from vectordb_bench.cli.cli import (
     IVFFlatTypedDictN,
     cli,
     click_parameter_decorators_from_typed_dict,
+    parse_calibration_extra_params,
     run,
 )
 
@@ -74,6 +75,7 @@ def MilvusAutoIndex(**parameters: Unpack[MilvusAutoIndexTypedDict]):
         db_case_config=AutoIndexConfig(
             calibration_target=parameters["calibrate"],
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -97,6 +99,7 @@ def MilvusFlat(**parameters: Unpack[MilvusAutoIndexTypedDict]):
         db_case_config=FLATConfig(
             calibration_target=parameters["calibrate"],
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -127,6 +130,7 @@ def MilvusHNSW(**parameters: Unpack[MilvusHNSWTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "ef",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -199,6 +203,7 @@ def MilvusHNSWPQ(**parameters: Unpack[MilvusHNSWPQTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "ef",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -247,6 +252,7 @@ def MilvusHNSWPRQ(**parameters: Unpack[MilvusHNSWPRQTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "ef",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -290,6 +296,7 @@ def MilvusHNSWSQ(**parameters: Unpack[MilvusHNSWSQTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "ef",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -319,6 +326,7 @@ def MilvusIVFFlat(**parameters: Unpack[MilvusIVFFlatTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "nprobe",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -345,6 +353,7 @@ def MilvusIVFSQ8(**parameters: Unpack[MilvusIVFFlatTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "nprobe",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -414,6 +423,7 @@ def MilvusIVFRabitQ(**parameters: Unpack[MilvusIVFRABITQTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "nprobe",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -443,6 +453,7 @@ def MilvusDISKANN(**parameters: Unpack[MilvusDISKANNTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "search_list",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -479,6 +490,7 @@ def MilvusGPUIVFFlat(**parameters: Unpack[MilvusGPUIVFTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "nprobe",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -515,6 +527,7 @@ def MilvusGPUBruteForce(**parameters: Unpack[MilvusGPUBruteForceTypedDict]):
             limit=parameters["limit"],  # top-k for search
             calibration_target=parameters["calibrate"],
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -612,6 +625,7 @@ def MilvusSVSVamana(**parameters: Unpack[MilvusSVSVamanaTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "svs_search_window_size",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -642,6 +656,7 @@ def MilvusSVSVamanaLVQ(**parameters: Unpack[MilvusSVSVamanaTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "svs_search_window_size",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -687,6 +702,7 @@ def MilvusSVSVamanaLeanVec(**parameters: Unpack[MilvusSVSVamanaLeanVecTypedDict]
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "svs_search_window_size",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -727,6 +743,7 @@ def MilvusGPUIVFPQ(**parameters: Unpack[MilvusGPUIVFPQTypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "nprobe",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
@@ -775,6 +792,7 @@ def MilvusGPUCAGRA(**parameters: Unpack[MilvusGPUCAGRATypedDict]):
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "itopk_size",
             calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
         ),
         **parameters,
     )
