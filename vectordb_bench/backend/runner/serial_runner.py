@@ -5,6 +5,7 @@ import math
 import multiprocessing as mp
 import time
 import traceback
+from typing import Any
 
 import numpy as np
 
@@ -145,7 +146,7 @@ class SerialSearchRunner:
             self.test_data = test_data
         self.ground_truth = ground_truth
 
-    def _get_db_search_res(self, emb: list[float], retry_idx: int = 0, config_overwrite: dict[str, int] | None = None) -> list[int]:
+    def _get_db_search_res(self, emb: list[float], retry_idx: int = 0, config_overwrite: dict[str, Any] | None = None) -> list[int]:
         try:
             results = self.db.search_embedding(emb, self.k, config_overwrite=config_overwrite)
         except Exception as e:
@@ -196,13 +197,7 @@ class SerialSearchRunner:
         while True:
             previous_recall = current_recall
             previous_avg_latency = current_avg_latency
-            config_overwrite = {calibration_param: current}
-            if extra_params:
-                for param_name, (param_type, param_value) in extra_params.items():
-                    if param_type == CalibrationType.MULTIPLIER:
-                        config_overwrite[param_name] = int(current * param_value)
-                    else:
-                        config_overwrite[param_name] = param_value
+            config_overwrite = self._resolve_extra_params(calibration_param, current, extra_params)
             recalls = []
             latencies = []
             for idx, emb in enumerate(test_data):
@@ -292,8 +287,6 @@ class SerialSearchRunner:
             log.debug(f"test dataset size: {len(test_data)}")
             log.debug(f"ground truth size: {len(ground_truth)}")
 
-            config_overwrite: dict | None = None
-
             if (
                 ground_truth is not None
                 and (calibration_target := self.db_case_config.search_param()["params"]["calibration_target"]) is not None
@@ -304,6 +297,7 @@ class SerialSearchRunner:
                 combos = self._generate_extra_param_combos(extra_params_spec)
 
                 best_avg_latency = math.inf
+                best_config_overwrite = None
                 for combo_idx, combo in enumerate(combos):
                     log.info(
                         f"{mp.current_process().name:14} calibrating combo {combo_idx + 1}/{len(combos)}: "
@@ -314,16 +308,19 @@ class SerialSearchRunner:
                         test_data, ground_truth, calibration_param, self.k,
                         calibration_target, calibration_limit, extra_params=combo,
                     )
-                    resolved = self._resolve_extra_params(calibration_param, value, combo)
+                    current_config_overwrite = self._resolve_extra_params(calibration_param, value, combo)
                     log.info(
                         f"{mp.current_process().name:14} combo {combo_idx + 1}/{len(combos)}: "
-                        f"calibrated to {recall=!s} at {value}, {avg_latency=:.4f}, params={resolved}"
+                        f"calibrated to {recall=!s} at {value}, {avg_latency=:.4f}, params={current_config_overwrite}"
                     )
                     if avg_latency < best_avg_latency:
                         best_avg_latency = avg_latency
-                        config_overwrite = resolved
+                        best_config_overwrite = current_config_overwrite
+                config_overwrite = best_config_overwrite
+            else:
+                config_overwrite = None
 
-            latencies, recalls_list, ndcgs_list = [], [], []
+            latencies, recalls, ndcgs = [], [], []
             for idx, emb in enumerate(test_data):
                 s = time.perf_counter()
                 try:
@@ -336,21 +333,21 @@ class SerialSearchRunner:
 
                 if ground_truth is not None:
                     gt = ground_truth[idx]
-                    recalls_list.append(calc_recall(self.k, gt[: self.k], results))
-                    ndcgs_list.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
+                    recalls.append(calc_recall(self.k, gt[: self.k], results))
+                    ndcgs.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
                 else:
-                    recalls_list.append(0)
-                    ndcgs_list.append(0)
+                    recalls.append(0)
+                    ndcgs.append(0)
 
                 if len(latencies) % 100 == 0:
                     log.debug(
                         f"({mp.current_process().name:14}) search_count={len(latencies):3}, "
-                        f"latest_latency={latencies[-1]}, latest recall={recalls_list[-1]}"
+                        f"latest_latency={latencies[-1]}, latest recall={recalls[-1]}"
                     )
 
         avg_latency = round(np.mean(latencies), 4)
-        avg_recall = round(np.mean(recalls_list), 4)
-        avg_ndcg = round(np.mean(ndcgs_list), 4)
+        avg_recall = round(np.mean(recalls), 4)
+        avg_ndcg = round(np.mean(ndcgs), 4)
         cost = round(np.sum(latencies), 4)
         p99 = round(np.percentile(latencies, 99), 4)
         p95 = round(np.percentile(latencies, 95), 4)

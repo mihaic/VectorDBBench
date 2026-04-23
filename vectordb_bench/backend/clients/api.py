@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, model_validator
 
@@ -245,7 +246,7 @@ class VectorDB(ABC):
         self,
         query: list[float],
         k: int = 100,
-        config_overwrite: dict[str, int] | None = None,
+        config_overwrite: dict[str, Any] | None = None,
     ) -> list[int]:
         """Get k most similar embeddings to query vector.
 

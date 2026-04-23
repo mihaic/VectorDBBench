@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
+from typing import Any
 
 from pymilvus import DataType, MilvusClient, MilvusException
 
@@ -251,8 +252,8 @@ class Milvus(VectorDB):
         self,
         query: list[float],
         k: int = 100,
+        config_overwrite: dict[str, Any] | None = None,
         timeout: int | None = None,
-        config_overwrite: dict[str, int] | None = None,
     ) -> list[int]:
         """Perform a search on a query embedding and return results."""
         assert self.client is not None
