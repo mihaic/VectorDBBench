@@ -282,44 +282,6 @@ class SerialSearchRunner:
                     result[param_name] = param_value
         return result
 
-    def _run_search_sweep(
-        self,
-        test_data: list,
-        ground_truth: list[list[int]] | None,
-        ideal_dcg: float,
-        config_overwrite: dict | None,
-    ) -> tuple[list[float], list[float], list[float]]:
-        """Run the full test-data search with *config_overwrite* and return raw metric lists.
-
-        Returns:
-            (latencies, recalls, ndcgs) – one value per query.
-        """
-        latencies, recalls, ndcgs = [], [], []
-        for idx, emb in enumerate(test_data):
-            s = time.perf_counter()
-            try:
-                results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
-            except Exception as e:
-                log.warning(f"VectorDB search_embedding error: {e}")
-                raise e from None
-
-            latencies.append(time.perf_counter() - s)
-
-            if ground_truth is not None:
-                gt = ground_truth[idx]
-                recalls.append(calc_recall(self.k, gt[: self.k], results))
-                ndcgs.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
-            else:
-                recalls.append(0)
-                ndcgs.append(0)
-
-            if len(latencies) % 100 == 0:
-                log.debug(
-                    f"({mp.current_process().name:14}) search_count={len(latencies):3}, "
-                    f"latest_latency={latencies[-1]}, latest recall={recalls[-1]}"
-                )
-        return latencies, recalls, ndcgs
-
     def search(self, args: tuple[list, list[list[int]]]) -> tuple[float, float, float, float]:
         log.info(f"{mp.current_process().name:14} start search the entire test_data to get recall and latency")
         with self.db.init():
@@ -361,9 +323,30 @@ class SerialSearchRunner:
                         best_avg_latency = avg_latency
                         config_overwrite = resolved
 
-            latencies, recalls_list, ndcgs_list = self._run_search_sweep(
-                test_data, ground_truth, ideal_dcg, config_overwrite,
-            )
+            latencies, recalls_list, ndcgs_list = [], [], []
+            for idx, emb in enumerate(test_data):
+                s = time.perf_counter()
+                try:
+                    results = self._get_db_search_res(emb, config_overwrite=config_overwrite)
+                except Exception as e:
+                    log.warning(f"VectorDB search_embedding error: {e}")
+                    raise e from None
+
+                latencies.append(time.perf_counter() - s)
+
+                if ground_truth is not None:
+                    gt = ground_truth[idx]
+                    recalls_list.append(calc_recall(self.k, gt[: self.k], results))
+                    ndcgs_list.append(calc_ndcg(gt[: self.k], results, ideal_dcg))
+                else:
+                    recalls_list.append(0)
+                    ndcgs_list.append(0)
+
+                if len(latencies) % 100 == 0:
+                    log.debug(
+                        f"({mp.current_process().name:14}) search_count={len(latencies):3}, "
+                        f"latest_latency={latencies[-1]}, latest recall={recalls_list[-1]}"
+                    )
 
         avg_latency = round(np.mean(latencies), 4)
         avg_recall = round(np.mean(recalls_list), 4)
