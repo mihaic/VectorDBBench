@@ -115,6 +115,15 @@ class RedisSVSVAMANATypedDict(CommonTypedDict, RedisTypedDict):
             help="SVS-VAMANA compression type (LeanVec4x8 or LVQ8)",
         ),
     ]
+    reduce: Annotated[
+        int | None,
+        click.option(
+            "--reduce",
+            type=int,
+            default=None,
+            help="SVS-VAMANA REDUCE parameter for LeanVec compression",
+        ),
+    ]
 
 
 @cli.command()

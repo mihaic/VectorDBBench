@@ -76,6 +76,7 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
     compression: Literal["LeanVec4x8", "LVQ8"] | None = None
     index: IndexType = IndexType.SVS_VAMANA_REDIS
     calibration_param: Literal["search_window_size", "filtering_batch_size"] = "search_window_size"
+    reduce: int | None = None
 
     def index_param(self) -> dict:
         params: dict = {
@@ -84,6 +85,8 @@ class RedisSVSVAMANAConfig(RedisIndexConfig, DBCaseConfig):
         }
         if self.compression is not None:
             params["COMPRESSION"] = self.compression
+        if self.reduce is not None:
+            params["REDUCE"] = self.reduce
         return {
             "metric_type": self.parse_metric(),
             "index_type": self.index.value,
