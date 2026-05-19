@@ -184,6 +184,7 @@ def RedisSVSVAMANA(**parameters: Unpack[RedisSVSVAMANATypedDict]):
             calibration_limit=parameters["calibration_limit"],
             calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
             use_float16=parameters["use_float16"],
+            reduce=parameters["reduce"],
         ),
         **parameters,
     )
