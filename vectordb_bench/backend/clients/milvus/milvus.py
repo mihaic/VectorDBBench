@@ -30,7 +30,7 @@ class Milvus(VectorDB):
         dim: int,
         db_config: dict,
         db_case_config: MilvusIndexConfig,
-        collection_name: str | None = None,
+        collection_name: str = "VDBBench",
         drop_old: bool = False,
         name: str = "Milvus",
         with_scalar_labels: bool = False,
@@ -40,8 +40,6 @@ class Milvus(VectorDB):
         self.name = name
         self.db_config = db_config
         self.case_config = db_case_config
-        if collection_name is None:
-            collection_name = "VDBBench_" + db_case_config.index.value
         self.collection_name = collection_name
         self.batch_size = int(MILVUS_LOAD_REQS_SIZE / (dim * 4))
         self.with_scalar_labels = with_scalar_labels
