@@ -201,6 +201,9 @@ class Milvus(VectorDB):
         if self.case_config.is_gpu_index:
             log.info("current gpu_index only supports IP / L2, cosine dataset need normalize.")
             return True
+        if self.case_config.is_svs_index:
+            log.info("current SVS indexes only supports IP / L2, cosine dataset need normalize.")
+            return True
 
         return False
 

@@ -52,12 +52,22 @@ class MilvusIndexConfig(BaseModel):
             IndexType.GPU_BRUTE_FORCE,
         ]
 
+    @property
+    def is_svs_index(self) -> bool:
+        return self.index in [
+            IndexType.SVS_VAMANA,
+            IndexType.SVS_VAMANA_LVQ,
+            IndexType.SVS_VAMANA_LEANVEC,
+        ]
+
     def parse_metric(self) -> str:
         if not self.metric_type:
             return ""
 
         if self.is_gpu_index and self.metric_type == MetricType.COSINE:
             return MetricType.L2.value
+        if self.is_svs_index and self.metric_type == MetricType.COSINE:
+            return MetricType.IP.value
         return self.metric_type.value
 
     def adjust_search_params(self, params: dict) -> dict:
