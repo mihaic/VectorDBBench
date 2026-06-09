@@ -17,6 +17,20 @@ log = logging.getLogger(__name__)
 
 MILVUS_LOAD_REQS_SIZE = 1.5 * 1024 * 1024
 
+# Force-merge target size in MB. Intentionally huge so the server's memory-aware
+# force-merge policy decides the real target segment size/count (which may be more
+# than one segment when memory is limited).
+MILVUS_COMPACT_TARGET_SIZE_MB = 2**31 - 1
+# Seconds between polls while waiting for sort / index / segment quiescence.
+MILVUS_OPTIMIZE_POLL_INTERVAL = 5
+# Number of consecutive identical persistent-segment samples required before the
+# segment layout is considered quiescent (no auto/mix compaction in flight).
+MILVUS_OPTIMIZE_STABLE_CHECKS = 3
+# Wall-clock safety net only. Convergence (a force-merge round that no longer
+# reduces the segment count) plus full load is the primary termination signal;
+# this deadline merely prevents waiting forever if the cluster never settles.
+MILVUS_OPTIMIZE_DEADLINE_SECONDS = 3600 * 3
+
 
 class Milvus(VectorDB):
     supported_filter_types: list[FilterOp] = [
@@ -138,63 +152,198 @@ class Milvus(VectorDB):
         self.client.close()
         self.client = None
 
-    def _wait_for_segments_sorted(self):
+    def _persistent_data_segments(self) -> list:
+        """Flushed, non-L0 persistent (data) segments for the collection.
+
+        L0 segments only hold deletes and are never force-merge targets, so they
+        are excluded from both convergence and load-coverage accounting.
+        """
+        segments = self.client.list_persistent_segments(self.collection_name)
+        return [
+            s
+            for s in segments
+            if s.level_name != "L0" and s.state_name in ("Flushed", "Sealed")
+        ]
+
+    def _wait_for_segments_sorted(self, deadline: float):
         while True:
             segments = self.client.list_persistent_segments(self.collection_name)
             unsorted = [s for s in segments if not s.is_sorted]
             if not unsorted:
                 log.info(f"{self.name} all persistent segments are sorted.")
-                break
+                return
+            if time.time() >= deadline:
+                log.warning(f"{self.name} timed out waiting for {len(unsorted)} segments to be sorted.")
+                return
             log.debug(f"{self.name} waiting for {len(unsorted)} segments to be sorted...")
-            time.sleep(5)
+            time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
 
-    def _wait_for_index(self):
+    def _wait_for_index(self, deadline: float):
         while True:
             info = self.client.describe_index(self.collection_name, self._vector_index_name)
             if info.get("pending_index_rows", -1) == 0:
-                break
-            time.sleep(5)
+                return
+            if time.time() >= deadline:
+                log.warning(
+                    f"{self.name} timed out waiting for index, "
+                    f"pending_index_rows={info.get('pending_index_rows', -1)}.",
+                )
+                return
+            time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
 
-    def _wait_for_compaction(self, compaction_id: int):
+    def _wait_for_compaction(self, compaction_id: int, deadline: float):
         while True:
             state = self.client.get_compaction_state(compaction_id)
             if state == "Completed":
-                break
-            time.sleep(0.5)
+                return
+            if time.time() >= deadline:
+                log.warning(f"{self.name} timed out waiting for compaction {compaction_id}, state={state}.")
+                return
+            time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
 
-    def _optimize(self):
+    def _wait_until_segments_stable(self, deadline: float) -> list:
+        """Wait until the persistent segment layout quiesces.
+
+        Returns once the persistent (non-L0) segment-id set is identical across
+        ``MILVUS_OPTIMIZE_STABLE_CHECKS`` consecutive samples while all segments
+        are sorted and the index has no pending rows. A stable set means no
+        auto/mix compaction is currently rewriting segments.
+        """
+        prev_ids: frozenset | None = None
+        stable = 0
+        while True:
+            self._wait_for_segments_sorted(deadline)
+            self._wait_for_index(deadline)
+
+            segments = self._persistent_data_segments()
+            ids = frozenset(s.segment_id for s in segments)
+            if ids == prev_ids:
+                stable += 1
+                if stable >= MILVUS_OPTIMIZE_STABLE_CHECKS:
+                    log.info(
+                        f"{self.name} segment layout stable: "
+                        f"{len(segments)} persistent segments, "
+                        f"{sum(s.num_rows for s in segments)} rows.",
+                    )
+                    return segments
+            else:
+                stable = 0
+                prev_ids = ids
+
+            if time.time() >= deadline:
+                log.warning(
+                    f"{self.name} timed out waiting for segment layout to stabilize, "
+                    f"{len(segments)} persistent segments.",
+                )
+                return segments
+            time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
+
+    def _force_merge_to_convergence(self, deadline: float) -> list:
+        """Force-merge until no further compaction is possible.
+
+        The memory-aware force-merge policy converges to a target segment count
+        that may be greater than one. Convergence is detected as a fixpoint: a
+        force-merge round that no longer reduces the persistent segment count
+        (or a ``compact()`` call that returns no job because nothing is eligible).
+        """
+        segments = self._wait_until_segments_stable(deadline)
+        while True:
+            prev_count = len(segments)
+            try:
+                compaction_id = self.client.compact(
+                    self.collection_name,
+                    target_size=MILVUS_COMPACT_TARGET_SIZE_MB,
+                )
+            except Exception as e:
+                if hasattr(e, "code") and e.code().name == "PERMISSION_DENIED":
+                    log.warning(f"{self.name} skip force merge due to compact permission denied.")
+                    return segments
+                raise
+
+            if compaction_id is not None and compaction_id > 0:
+                log.info(f"{self.name} force merge started compaction {compaction_id}.")
+                self._wait_for_compaction(compaction_id, deadline)
+            else:
+                log.info(f"{self.name} force merge found nothing to compact (compaction_id={compaction_id}).")
+
+            segments = self._wait_until_segments_stable(deadline)
+            if len(segments) >= prev_count:
+                log.info(
+                    f"{self.name} force merge converged at {len(segments)} persistent segments; "
+                    f"further compaction not possible.",
+                )
+                return segments
+            if time.time() >= deadline:
+                log.warning(f"{self.name} force merge stopped at deadline with {len(segments)} segments.")
+                return segments
+
+    def _wait_for_load_complete(self, deadline: float, data_size: int | None):
+        """Wait until every persistent segment is loaded and rows are covered.
+
+        Ensures the query view is search-ready: all persistent (non-L0) segments
+        appear in the loaded segment set (i.e. unloadedSealedSegmentNum == 0) and
+        the loaded rows cover the expected row count.
+        """
+        self.client.refresh_load(self.collection_name)
+        self._wait_for_index(deadline)
+        while True:
+            persistent = self._persistent_data_segments()
+            persistent_ids = frozenset(s.segment_id for s in persistent)
+            persistent_rows = sum(s.num_rows for s in persistent)
+            expected_rows = data_size if data_size is not None else persistent_rows
+
+            loaded = self.client.list_loaded_segments(self.collection_name)
+            loaded_ids = frozenset(s.segment_id for s in loaded)
+            loaded_rows = sum(s.num_rows for s in loaded)
+
+            all_loaded = persistent_ids <= loaded_ids
+            rows_covered = loaded_rows >= expected_rows and persistent_rows >= expected_rows
+            if all_loaded and rows_covered:
+                log.info(
+                    f"{self.name} load complete: {len(loaded)} loaded segments, "
+                    f"{loaded_rows} loaded rows, {len(persistent)} persistent segments.",
+                )
+                return
+
+            if time.time() >= deadline:
+                log.warning(
+                    f"{self.name} timed out waiting for full load: "
+                    f"persistent={len(persistent)} ({persistent_rows} rows), "
+                    f"loaded={len(loaded)} ({loaded_rows} rows), "
+                    f"unloaded_persistent={len(persistent_ids - loaded_ids)}.",
+                )
+                return
+            time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
+
+    def _optimize(self, data_size: int | None = None):
         log.info(f"{self.name} optimizing before search")
+        deadline = time.time() + MILVUS_OPTIMIZE_DEADLINE_SECONDS
         try:
             self.client.flush(self.collection_name)
 
             if self.case_config.is_gpu_index:
                 log.debug("skip force merge compaction for gpu index type.")
+                self._wait_for_index(deadline)
             else:
-                try:
-                    # wait for sort, index, compact
-                    self._wait_for_segments_sorted()
-                    self._wait_for_index()
-                    compaction_id = self.client.compact(self.collection_name, target_size=(2**63 - 1))
-                    if compaction_id > 0:
-                        self._wait_for_compaction(compaction_id)
-                    log.info(f"{self.name} force merge compaction completed.")
-                except Exception as e:
-                    log.warning(f"{self.name} compact or list segments error: {e}")
-                    if hasattr(e, "code") and e.code().name == "PERMISSION_DENIED":
-                        log.warning("Skip compact due to list segments or compact permission denied.")
-                    else:
-                        raise e from None
+                self._force_merge_to_convergence(deadline)
+                log.info(f"{self.name} force merge compaction completed.")
 
-            # wait for index no matter what
-            self._wait_for_index()
-            self.client.refresh_load(self.collection_name)
+            self._wait_for_load_complete(deadline, data_size)
         except Exception as e:
             log.warning(f"{self.name} optimize error: {e}")
             raise e from None
 
     def optimize(self, data_size: int | None = None):
         assert self.client, "Please call self.init() before"
-        self._optimize()
+        log.info(
+            f"before {self.client.list_loaded_segments(self.collection_name)} "
+            f"{self.client.list_indexes(self.collection_name, self._vector_field)}",
+        )
+        self._optimize(data_size=data_size)
+        log.info(
+            f"after {self.client.list_loaded_segments(self.collection_name)} "
+            f"{self.client.list_indexes(self.collection_name, self._vector_field)}",
+        )
 
     def need_normalize_cosine(self) -> bool:
         """Wheather this database need to normalize dataset to support COSINE"""
