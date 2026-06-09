@@ -602,6 +602,7 @@ class SVSVamanaLVQConfig(SVSVamanaConfig):
 class SVSVamanaLeanVecConfig(SVSVamanaConfig):
     svs_storage_kind: str = "leanvec4x4"
     svs_leanvec_dim: int = 0
+    svs_leanvec_ood: bool = True
     index: IndexType = IndexType.SVS_VAMANA_LEANVEC
 
     def index_param(self) -> dict:
@@ -610,6 +611,7 @@ class SVSVamanaLeanVecConfig(SVSVamanaConfig):
             "svs_construction_window_size": self.svs_construction_window_size,
             "svs_storage_kind": self.svs_storage_kind,
             "svs_leanvec_dim": self.svs_leanvec_dim,
+            "svs_leanvec_ood": self.svs_leanvec_ood,
         }
         if self.svs_alpha is not None:
             params["svs_alpha"] = self.svs_alpha
