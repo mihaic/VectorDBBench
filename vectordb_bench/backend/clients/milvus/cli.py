@@ -598,6 +598,14 @@ class MilvusSVSVamanaTypedDict(CommonTypedDict, MilvusTypedDict):
             default=None,
         ),
     ]
+    svs_is_static: Annotated[
+        bool,
+        click.option(
+            "--svs-is-static",
+            type=bool,
+            help="Use static SVS index.",
+        ),
+    ]
 
 
 @cli.command()
@@ -620,6 +628,7 @@ def MilvusSVSVamana(**parameters: Unpack[MilvusSVSVamanaTypedDict]):
             svs_construction_window_size=parameters["svs_construction_window_size"],
             svs_alpha=parameters["svs_alpha"],
             svs_storage_kind=parameters["svs_storage_kind"],
+            svs_is_static=parameters["svs_is_static"],
             svs_search_window_size=parameters["svs_search_window_size"],
             svs_search_buffer_capacity=parameters["svs_search_buffer_capacity"],
             calibration_target=parameters["calibrate"],
@@ -674,6 +683,14 @@ class MilvusSVSVamanaLeanVecTypedDict(MilvusSVSVamanaTypedDict):
             show_default=True,
         ),
     ]
+    svs_leanvec_ood: Annotated[
+        bool,
+        click.option(
+            "--svs-leanvec-ood",
+            type=bool,
+            help="Use out-of-distribution LeanVec.",
+        ),
+    ]
 
 
 @cli.command()
@@ -699,6 +716,7 @@ def MilvusSVSVamanaLeanVec(**parameters: Unpack[MilvusSVSVamanaLeanVecTypedDict]
             svs_search_window_size=parameters["svs_search_window_size"],
             svs_search_buffer_capacity=parameters["svs_search_buffer_capacity"],
             svs_leanvec_dim=parameters["svs_leanvec_dim"],
+            svs_leanvec_ood=parameters["svs_leanvec_ood"],
             calibration_target=parameters["calibrate"],
             calibration_param=parameters["calibration_param"] or "svs_search_window_size",
             calibration_limit=parameters["calibration_limit"],
