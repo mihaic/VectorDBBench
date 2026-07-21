@@ -603,6 +603,7 @@ class MilvusSVSVamanaTypedDict(CommonTypedDict, MilvusTypedDict):
         click.option(
             "--svs-is-static",
             type=bool,
+            default=True,
             help="Use static SVS index.",
         ),
     ]
@@ -687,6 +688,7 @@ class MilvusSVSVamanaLeanVecTypedDict(MilvusSVSVamanaTypedDict):
         bool,
         click.option(
             "--svs-leanvec-ood",
+            default=False,
             type=bool,
             help="Use out-of-distribution LeanVec.",
         ),
