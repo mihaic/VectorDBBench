@@ -213,13 +213,13 @@ class CaseRunner(BaseModel):
             if TaskStage.SEARCH_SERIAL in self.config.stages or TaskStage.SEARCH_CONCURRENT in self.config.stages:
                 self._init_search_runner()
                 if TaskStage.SEARCH_SERIAL in self.config.stages:
-                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_SERIAL):
+                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_SERIAL, row_count=self.ca.dataset.data.size):
                         search_results =  self._serial_search()
                     m.recall, m.ndcg, m.serial_latency_p99, m.serial_latency_p95, config_overwrite = search_results
                 else:
                     config_overwrite = None
                 if TaskStage.SEARCH_CONCURRENT in self.config.stages:
-                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_CONCURRENT):
+                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_CONCURRENT, row_count=self.ca.dataset.data.size):
                         search_results = self._conc_search(config_overwrite)
                     (
                         m.qps,

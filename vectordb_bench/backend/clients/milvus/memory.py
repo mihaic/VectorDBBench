@@ -26,10 +26,11 @@ log = logging.getLogger(__name__)
 
 MILVUS_METRICS_PORT = 9091
 MILVUS_METRICS_TIMEOUT = 5
-# Number of consecutive identical samples that mark the index size as settled, and the
-# wall-clock safety net for waiting on it.
+# Number of consecutive identical samples that mark the loaded data as settled, and the
+# wall-clock safety net for waiting on it. The deadline is generous because the wait also
+# covers loading a large index from object storage.
 MILVUS_INDEX_STABLE_CHECKS = 3
-MILVUS_INDEX_STABLE_DEADLINE_SECONDS = 120
+MILVUS_INDEX_STABLE_DEADLINE_SECONDS = 600
 
 # name{label="value",...} value
 _METRIC_LINE = re.compile(r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>\S+)$")
@@ -66,19 +67,24 @@ class MilvusMemorySnapshot:
     other_mem: float = 0.0
     loaded_rows: float = 0.0
     loaded_segments: float = 0.0
+    loading: float = 0.0
 
     @property
     def index_memory(self) -> float:
         """Resident vector-index bytes (mmapped indexes are reported separately)."""
         return self.vector_index_mem
 
-    def index_report(self, row_count: int | None = None) -> str:
+    def report(self, row_count: int | None = None) -> str:
+        """Full memory use: process totals plus the loaded-data breakdown."""
         per_vector = ""
         if row_count:
             per_vector = f" ({self.vector_index_mem / row_count:.1f} B/vector over {row_count} rows)"
         # loaded_rows above the dataset size means superseded segments are still
         # resident, so the index bytes cover more than the final index.
         return (
+            f"rss={_fmt_bytes(self.rss)}, "
+            f"jemalloc_allocated={_fmt_bytes(self.jemalloc_allocated)}, "
+            f"jemalloc_resident={_fmt_bytes(self.jemalloc_resident)}, "
             f"loaded_rows={self.loaded_rows:.0f}, loaded_segments={self.loaded_segments:.0f}, "
             f"vector_index={_fmt_bytes(self.vector_index_mem)}{per_vector}, "
             f"vector_index_mmap={_fmt_bytes(self.vector_index_disk)}, "
@@ -86,8 +92,7 @@ class MilvusMemorySnapshot:
             f"vector_field_mmap={_fmt_bytes(self.vector_field_disk)}, "
             f"scalar_index={_fmt_bytes(self.scalar_index_mem)}, "
             f"scalar_field={_fmt_bytes(self.scalar_field_mem)}, "
-            f"other={_fmt_bytes(self.other_mem)}, "
-            f"rss={_fmt_bytes(self.rss)}"
+            f"other={_fmt_bytes(self.other_mem)}"
         )
 
 
@@ -150,44 +155,64 @@ class MilvusMemoryMonitor:
             other_mem=total(loaded, data_type="other", location="memory"),
             loaded_rows=total("milvus_querynode_entity_num", segment_state="Sealed"),
             loaded_segments=total("milvus_querynode_segment_num", segment_state="Sealed", segment_level="L1"),
+            loading=total("internal_cache_loading_bytes"),
         )
 
-    def _settled_snapshot(self) -> MilvusMemorySnapshot | None:
-        """Sample until the index size stops changing.
+    def _settled_snapshot(self, expected_rows: int | None = None) -> MilvusMemorySnapshot | None:
+        """Sample until the loaded data settles.
 
-        A compaction leaves the superseded segments resident for a while after the new
-        one is loaded, which counts their indexes twice; the counter drops once they are
-        released.
+        Settled means nothing is being loaded, the expected rows are resident, and the
+        index size stops changing. The wait matters twice: a compaction leaves the
+        superseded segments resident for a while after the new one is loaded, which
+        counts their indexes twice, and a server that has just been restarted reports
+        a partial index until it finishes loading the collection from storage.
         """
         deadline = time.monotonic() + MILVUS_INDEX_STABLE_DEADLINE_SECONDS
         interval = max(self.interval, 1.0)
         previous = None
         stable = 0
+        waiting_logged = False
         while True:
             snapshot = self.snapshot()
             if snapshot is None:
                 return None
-            if snapshot.vector_index_mem == previous:
+            loading_done = snapshot.loading == 0
+            rows_covered = expected_rows is None or snapshot.loaded_rows >= expected_rows
+            if not (loading_done and rows_covered):
+                stable = 0
+                if not waiting_logged:
+                    waiting_logged = True
+                    log.info(
+                        f"{self.name} waiting for the collection to finish loading "
+                        f"(loading={_fmt_bytes(snapshot.loading)}, loaded_rows={snapshot.loaded_rows:.0f})",
+                    )
+            elif snapshot.vector_index_mem == previous:
                 stable += 1
                 if stable >= MILVUS_INDEX_STABLE_CHECKS:
                     return snapshot
             else:
                 stable = 0
-                previous = snapshot.vector_index_mem
+            previous = snapshot.vector_index_mem
             if time.monotonic() >= deadline:
                 log.warning(
-                    f"{self.name} index size still changing after "
-                    f"{MILVUS_INDEX_STABLE_DEADLINE_SECONDS}s, reporting the last sample.",
+                    f"{self.name} loaded data still unsettled after "
+                    f"{MILVUS_INDEX_STABLE_DEADLINE_SECONDS}s "
+                    f"(loading={_fmt_bytes(snapshot.loading)}, loaded_rows={snapshot.loaded_rows:.0f}, "
+                    f"expected_rows={expected_rows}), reporting the last sample.",
                 )
                 return snapshot
             time.sleep(interval)
 
-    def log_index_memory(self, row_count: int | None = None):
-        """Log the resident index size. Call once the collection is fully loaded."""
-        snapshot = self._settled_snapshot()
+    def log_memory(self, label: str, row_count: int | None = None):
+        """Log memory use once the collection is fully loaded and settled.
+
+        ``row_count`` is both the expected resident row count to wait for and the
+        divisor for the per-vector index size.
+        """
+        snapshot = self._settled_snapshot(expected_rows=row_count)
         if snapshot is None:
             return
-        log.info(f"{self.name} memory [index] {snapshot.index_report(row_count)}")
+        log.info(f"{self.name} memory [{label}] {snapshot.report(row_count)}")
 
     @contextmanager
     def monitor(self, phase: str):

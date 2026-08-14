@@ -24,6 +24,8 @@ internal_cache_loaded_bytes{data_type="vector_field",location="disk"} 3.072e+08
 internal_cache_loaded_bytes{data_type="scalar_index",location="memory"} 1.213319e+06
 internal_cache_loaded_bytes{data_type="scalar_field",location="memory"} 800000
 internal_cache_loaded_bytes{data_type="other",location="memory"} 261553
+internal_cache_loading_bytes{data_type="vector_index",location="memory"} 0
+internal_cache_loading_bytes{data_type="scalar_index",location="memory"} 0
 milvus_querynode_entity_num{collection_name="VDBBench",segment_state="Growing"} 0
 milvus_querynode_entity_num{collection_name="VDBBench",segment_state="Sealed"} 50000
 milvus_querynode_segment_num{segment_level="L0",segment_state="Sealed"} 0
@@ -64,17 +66,25 @@ class TestSnapshot:
         assert snapshot.other_mem == 261_553
         assert snapshot.loaded_rows == 50_000
         assert snapshot.loaded_segments == 1
+        assert snapshot.loading == 0
         assert snapshot.index_memory == snapshot.vector_index_mem
 
-    def test_index_report_includes_bytes_per_vector(self, monitor: MilvusMemoryMonitor):
-        report = monitor.snapshot().index_report(row_count=50000)
+    def test_report_includes_bytes_per_vector(self, monitor: MilvusMemoryMonitor):
+        report = monitor.snapshot().report(row_count=50000)
 
         assert "vector_index=86.4 MiB (1812.5 B/vector over 50000 rows)" in report
         assert "vector_field_mmap=293.0 MiB" in report
         assert "loaded_rows=50000, loaded_segments=1" in report
 
-    def test_index_report_without_row_count(self, monitor: MilvusMemoryMonitor):
-        assert "B/vector" not in monitor.snapshot().index_report()
+    def test_report_includes_process_memory(self, monitor: MilvusMemoryMonitor):
+        report = monitor.snapshot().report()
+
+        assert "rss=881.1 MiB" in report
+        assert "jemalloc_allocated=276.6 MiB" in report
+        assert "jemalloc_resident=1.0 GiB" in report
+
+    def test_report_without_row_count(self, monitor: MilvusMemoryMonitor):
+        assert "B/vector" not in monitor.snapshot().report()
 
     def test_index_memory_waits_for_compaction_to_release_segments(
         self,
@@ -89,10 +99,44 @@ class TestSnapshot:
         monkeypatch.setattr(memory.time, "sleep", lambda _: None)
 
         with caplog.at_level(logging.INFO):
-            monitor.log_index_memory(row_count=50000)
+            monitor.log_memory("index", row_count=50000)
 
         assert "vector_index=86.4 MiB (1812.5 B/vector over 50000 rows)" in caplog.text
         assert "172.9 MiB" not in caplog.text
+
+    def test_loaded_memory_waits_for_load_from_storage(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # A restarted server serves a partial index while it reads from storage.
+        loading = (
+            METRICS.replace('data_type="vector_index",location="memory"} 9.0624975e+07', "")
+            .replace('internal_cache_loading_bytes{data_type="vector_index",location="memory"} 0', "")
+            .replace('segment_state="Sealed"} 50000', 'segment_state="Sealed"} 20000')
+            + 'internal_cache_loaded_bytes{data_type="vector_index",location="memory"} 3.6e+07\n'
+            + 'internal_cache_loading_bytes{data_type="vector_index",location="memory"} 5.4e+07\n'
+        )
+        pages = [loading, loading, *[METRICS] * 4]
+        monitor = MilvusMemoryMonitor("http://localhost:9091/metrics", interval=0.01)
+        monkeypatch.setattr(monitor, "_fetch", lambda: pages.pop(0))
+        monkeypatch.setattr(memory.time, "sleep", lambda _: None)
+
+        with caplog.at_level(logging.INFO):
+            monitor.log_memory("loaded", row_count=50000)
+
+        assert "waiting for the collection to finish loading" in caplog.text
+        assert "memory [loaded] rss=881.1 MiB" in caplog.text
+        assert "vector_index=86.4 MiB (1812.5 B/vector over 50000 rows)" in caplog.text
+
+    def test_settling_waits_for_expected_rows(self, monkeypatch: pytest.MonkeyPatch):
+        partial = METRICS.replace('segment_state="Sealed"} 50000', 'segment_state="Sealed"} 20000')
+        pages = [partial, partial, *[METRICS] * 4]
+        monitor = MilvusMemoryMonitor("http://localhost:9091/metrics", interval=0.01)
+        monkeypatch.setattr(monitor, "_fetch", lambda: pages.pop(0))
+        monkeypatch.setattr(memory.time, "sleep", lambda _: None)
+
+        assert monitor._settled_snapshot(expected_rows=50000).loaded_rows == 50_000
 
     def test_monitor_logs_peak(self, monitor: MilvusMemoryMonitor, caplog: pytest.LogCaptureFixture):
         with caplog.at_level(logging.INFO), monitor.monitor("insert"):
@@ -128,8 +172,10 @@ class TestUnreachableEndpoint:
 
         assert "memory [search_serial] no samples collected" in caplog.text
 
-    def test_index_report_is_skipped(self, monitor: MilvusMemoryMonitor, caplog: pytest.LogCaptureFixture):
+    def test_memory_report_is_skipped(self, monitor: MilvusMemoryMonitor, caplog: pytest.LogCaptureFixture):
         with caplog.at_level(logging.INFO):
-            monitor.log_index_memory(row_count=50000)
+            monitor.log_memory("index", row_count=50000)
+            monitor.log_memory("loaded", row_count=50000)
 
         assert "memory [index]" not in caplog.text
+        assert "memory [loaded]" not in caplog.text

@@ -124,13 +124,14 @@ class Milvus(VectorDB):
             name=self.name,
         )
 
-    def memory_monitor(self, phase: BenchmarkPhase) -> AbstractContextManager:
+    def memory_monitor(self, phase: BenchmarkPhase, row_count: int | None = None) -> AbstractContextManager:
         if self.memory_monitor_impl is None:
             return nullcontext()
-        if phase in (BenchmarkPhase.SEARCH_SERIAL, BenchmarkPhase.SEARCH_CONCURRENT):
-            # Also report the index here, for runs that skip the load stage and
-            # therefore never reach optimize().
-            self.memory_monitor_impl.log_index_memory()
+        if phase in (BenchmarkPhase.SEARCH_SERIAL,):
+            # Report the loaded footprint before any query touches the collection. On a
+            # server restarted after optimize() this waits for the load from storage and
+            # then shows the memory a search-ready collection costs on its own.
+            self.memory_monitor_impl.log_memory("loaded", row_count=row_count)
         return self.memory_monitor_impl.monitor(phase)
 
     def _build_index_params(self):
@@ -370,7 +371,7 @@ class Milvus(VectorDB):
         if self.memory_monitor_impl is not None:
             # The collection is merged and fully loaded here, so the loaded-bytes
             # counters attribute all of it to this collection's final index.
-            self.memory_monitor_impl.log_index_memory(row_count=data_size)
+            self.memory_monitor_impl.log_memory("index", row_count=data_size)
 
     def need_normalize_cosine(self) -> bool:
         """Wheather this database need to normalize dataset to support COSINE"""

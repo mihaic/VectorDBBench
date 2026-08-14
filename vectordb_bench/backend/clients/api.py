@@ -184,11 +184,12 @@ class VectorDB(ABC):
         (All search tests in a case use consistent filtering conditions.)"""
         return
 
-    def memory_monitor(self, phase: BenchmarkPhase) -> AbstractContextManager:
+    def memory_monitor(self, phase: BenchmarkPhase, row_count: int | None = None) -> AbstractContextManager:
         """Optional server-side memory reporting for one benchmark phase.
 
         Clients that can read memory counters off the server override this to sample
-        them while the phase runs (e.g. to log the peak). The default does nothing, so
+        them while the phase runs (e.g. to log the peak). ``row_count`` is the number of
+        rows the phase expects to be present, when known. The default does nothing, so
         instrumenting a phase in the runners stays free for every other client.
         """
         return nullcontext()
