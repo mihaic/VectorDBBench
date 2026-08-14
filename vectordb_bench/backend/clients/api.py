@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from enum import StrEnum
 from typing import Any
 
@@ -11,6 +11,15 @@ from vectordb_bench.backend.filter import Filter, FilterOp
 class CalibrationType(StrEnum):
     MULTIPLIER = "MULTIPLIER"
     ABSOLUTE = "ABSOLUTE"
+
+
+class BenchmarkPhase(StrEnum):
+    """Phases of a performance case that clients can be asked to instrument."""
+
+    INSERT = "insert"
+    OPTIMIZE = "optimize"
+    SEARCH_SERIAL = "search_serial"
+    SEARCH_CONCURRENT = "search_concurrent"
 
 
 class MetricType(StrEnum):
@@ -174,6 +183,15 @@ class VectorDB(ABC):
 
         (All search tests in a case use consistent filtering conditions.)"""
         return
+
+    def memory_monitor(self, phase: BenchmarkPhase) -> AbstractContextManager:
+        """Optional server-side memory reporting for one benchmark phase.
+
+        Clients that can read memory counters off the server override this to sample
+        them while the phase runs (e.g. to log the peak). The default does nothing, so
+        instrumenting a phase in the runners stays free for every other client.
+        """
+        return nullcontext()
 
     @abstractmethod
     def __init__(

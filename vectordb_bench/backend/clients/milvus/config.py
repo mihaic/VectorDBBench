@@ -9,6 +9,9 @@ class MilvusConfig(DBConfig):
     password: SecretStr | None = None
     num_shards: int = 1
     replica_number: int = 1
+    log_memory: bool = False
+    memory_metrics_uri: str | None = None
+    memory_sample_interval: float = 1.0
 
     def to_dict(self) -> dict:
         return {
@@ -17,6 +20,9 @@ class MilvusConfig(DBConfig):
             "password": self.password.get_secret_value() if self.password else None,
             "num_shards": self.num_shards,
             "replica_number": self.replica_number,
+            "log_memory": self.log_memory,
+            "memory_metrics_uri": self.memory_metrics_uri,
+            "memory_sample_interval": self.memory_sample_interval,
         }
 
     @model_validator(mode="before")

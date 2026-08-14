@@ -12,7 +12,7 @@ from ..metric import Metric
 from ..models import PerformanceTimeoutError, TaskConfig, TaskStage
 from . import utils
 from .cases import Case, CaseLabel, StreamingPerformanceCase
-from .clients import DB, MetricType, api
+from .clients import DB, BenchmarkPhase, MetricType, api
 from .data_source import DatasetSource
 from .runner import (
     ConcurrentInsertRunner,
@@ -196,8 +196,10 @@ class CaseRunner(BaseModel):
             m = Metric()
             if drop_old:
                 if TaskStage.LOAD in self.config.stages:
-                    _, load_dur = self._load_train_data()
-                    build_dur = self._optimize()
+                    with self.db.memory_monitor(BenchmarkPhase.INSERT):
+                        _, load_dur = self._load_train_data()
+                    with self.db.memory_monitor(BenchmarkPhase.OPTIMIZE):
+                        build_dur = self._optimize()
                     m.insert_duration = round(load_dur, 4)
                     m.optimize_duration = round(build_dur, 4)
                     m.load_duration = round(load_dur + build_dur, 4)
@@ -211,12 +213,14 @@ class CaseRunner(BaseModel):
             if TaskStage.SEARCH_SERIAL in self.config.stages or TaskStage.SEARCH_CONCURRENT in self.config.stages:
                 self._init_search_runner()
                 if TaskStage.SEARCH_SERIAL in self.config.stages:
-                    search_results =  self._serial_search()
+                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_SERIAL):
+                        search_results =  self._serial_search()
                     m.recall, m.ndcg, m.serial_latency_p99, m.serial_latency_p95, config_overwrite = search_results
                 else:
                     config_overwrite = None
                 if TaskStage.SEARCH_CONCURRENT in self.config.stages:
-                    search_results = self._conc_search(config_overwrite)
+                    with self.db.memory_monitor(BenchmarkPhase.SEARCH_CONCURRENT):
+                        search_results = self._conc_search(config_overwrite)
                     (
                         m.qps,
                         m.conc_num_list,

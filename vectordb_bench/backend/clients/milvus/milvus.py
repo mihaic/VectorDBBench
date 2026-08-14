@@ -3,15 +3,16 @@
 import logging
 import time
 from collections.abc import Iterable
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any
 
 from pymilvus import DataType, MilvusClient, MilvusException
 
 from vectordb_bench.backend.filter import Filter, FilterOp
 
-from ..api import VectorDB
+from ..api import BenchmarkPhase, VectorDB
 from .config import MilvusIndexConfig
+from .memory import MilvusMemoryMonitor, metrics_url_from_uri
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Milvus(VectorDB):
         self.collection_name = collection_name
         self.batch_size = int(MILVUS_LOAD_REQS_SIZE / (dim * 4))
         self.with_scalar_labels = with_scalar_labels
+        self.memory_monitor_impl = self._init_memory_monitor()
 
         self._primary_field = "pk"
         self._scalar_id_field = "id"
@@ -109,6 +111,27 @@ class Milvus(VectorDB):
             )
 
         client.close()
+
+    def _init_memory_monitor(self) -> MilvusMemoryMonitor | None:
+        """Build the memory monitor if --log-memory was passed, else None."""
+        if not self.db_config.get("log_memory"):
+            return None
+        metrics_url = self.db_config.get("memory_metrics_uri") or metrics_url_from_uri(self.db_config.get("uri", ""))
+        log.info(f"{self.name} logging memory from {metrics_url}")
+        return MilvusMemoryMonitor(
+            metrics_url=metrics_url,
+            interval=self.db_config.get("memory_sample_interval", 1.0),
+            name=self.name,
+        )
+
+    def memory_monitor(self, phase: BenchmarkPhase) -> AbstractContextManager:
+        if self.memory_monitor_impl is None:
+            return nullcontext()
+        if phase in (BenchmarkPhase.SEARCH_SERIAL, BenchmarkPhase.SEARCH_CONCURRENT):
+            # Also report the index here, for runs that skip the load stage and
+            # therefore never reach optimize().
+            self.memory_monitor_impl.log_index_memory()
+        return self.memory_monitor_impl.monitor(phase)
 
     def _build_index_params(self):
         index_params = MilvusClient.prepare_index_params()
@@ -344,6 +367,10 @@ class Milvus(VectorDB):
             f"after {self.client.list_loaded_segments(self.collection_name)} "
             f"{self.client.list_indexes(self.collection_name, self._vector_field)}",
         )
+        if self.memory_monitor_impl is not None:
+            # The collection is merged and fully loaded here, so the loaded-bytes
+            # counters attribute all of it to this collection's final index.
+            self.memory_monitor_impl.log_index_memory(row_count=data_size)
 
     def need_normalize_cosine(self) -> bool:
         """Wheather this database need to normalize dataset to support COSINE"""

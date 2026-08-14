@@ -1,6 +1,7 @@
 from enum import Enum
 
 from .api import (
+    BenchmarkPhase,
     DBCaseConfig,
     DBConfig,
     EmptyDBCaseConfig,
@@ -657,6 +658,7 @@ class DB(Enum):
 
 __all__ = [
     "DB",
+    "BenchmarkPhase",
     "DBCaseConfig",
     "DBConfig",
     "EmptyDBCaseConfig",
