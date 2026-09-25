@@ -555,6 +555,15 @@ class SCANNConfig(MilvusIndexConfig, DBCaseConfig):
         }
 
 
+def _raise_buffer_to_window(params: dict, window_key: str, buffer_key: str) -> dict:
+    """SVS rejects a search buffer capacity below the search window size."""
+    search_window_size = params.get(window_key)
+    buffer_capacity = params.get(buffer_key)
+    if search_window_size is not None and (buffer_capacity is None or buffer_capacity < search_window_size):
+        params[buffer_key] = search_window_size
+    return params
+
+
 class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
     svs_graph_max_degree: int
     svs_construction_window_size: int = 40
@@ -595,11 +604,7 @@ class SVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
 
     def adjust_search_params(self, params: dict) -> dict:
         """Ensure svs_search_buffer_capacity is at least svs_search_window_size."""
-        search_window_size = params.get("svs_search_window_size")
-        buffer_capacity = params.get("svs_search_buffer_capacity")
-        if search_window_size is not None and (buffer_capacity is None or buffer_capacity < search_window_size):
-            params["svs_search_buffer_capacity"] = search_window_size
-        return params
+        return _raise_buffer_to_window(params, "svs_search_window_size", "svs_search_buffer_capacity")
 
 
 class SVSVamanaLVQConfig(SVSVamanaConfig):
@@ -631,6 +636,65 @@ class SVSVamanaLeanVecConfig(SVSVamanaConfig):
         }
 
 
+class FaissSVSVamanaConfig(MilvusIndexConfig, DBCaseConfig):
+    """SVS Vamana through the Faiss factory index (index_type "FAISS").
+
+    Graph degree, storage kind and LeanVec dimensionality come from the factory
+    string, e.g. "SVSVamana64", "SVSVamana64,LVQ4x8" or "SVSVamana64,LeanVec4x8_16".
+    is_static and store_vectors are set by Milvus and must not be passed.
+    """
+
+    faiss_index_name: str
+    prune_to: int | None = None
+    alpha: float | None = None
+    construction_window_size: int | None = None
+    max_candidate_pool_size: int | None = None
+    use_full_search_history: bool | None = None
+    ood_training: bool | None = None
+    search_window_size: int | None = None
+    search_buffer_capacity: int | None = None
+    index: IndexType = IndexType.FAISS
+    calibration_param: str = "search_window_size"
+
+    def index_param(self) -> dict:
+        params = {"faiss_index_name": self.faiss_index_name}
+        optional = {
+            "prune_to": self.prune_to,
+            "alpha": self.alpha,
+            "construction_window_size": self.construction_window_size,
+            "max_candidate_pool_size": self.max_candidate_pool_size,
+            "use_full_search_history": self.use_full_search_history,
+            "ood_training": self.ood_training,
+        }
+        params.update({k: v for k, v in optional.items() if v is not None})
+        return {
+            "metric_type": self.parse_metric(),
+            "index_type": self.index.value,
+            "params": params,
+        }
+
+    def search_param(self) -> dict:
+        return {
+            "metric_type": self.parse_metric(),
+            "params": {
+                "search_window_size": self.search_window_size,
+                "search_buffer_capacity": self.search_buffer_capacity,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
+        }
+
+    def adjust_search_params(self, params: dict) -> dict:
+        """Ensure search_buffer_capacity is at least search_window_size.
+
+        The Faiss adapter rejects unknown search keys, so the calibration keys the
+        runner reads from search_param() and unset values are dropped here.
+        """
+        params = {k: v for k, v in params.items() if v is not None and not k.startswith("calibration_")}
+        return _raise_buffer_to_window(params, "search_window_size", "search_buffer_capacity")
+
+
 _milvus_case_config = {
     IndexType.AUTOINDEX: AutoIndexConfig,
     IndexType.HNSW: HNSWConfig,
@@ -651,4 +715,5 @@ _milvus_case_config = {
     IndexType.SVS_VAMANA: SVSVamanaConfig,
     IndexType.SVS_VAMANA_LVQ: SVSVamanaLVQConfig,
     IndexType.SVS_VAMANA_LEANVEC: SVSVamanaLeanVecConfig,
+    IndexType.FAISS: FaissSVSVamanaConfig,
 }

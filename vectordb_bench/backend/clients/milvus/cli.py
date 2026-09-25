@@ -677,6 +677,85 @@ def MilvusSVSVamanaLeanVec(**parameters: Unpack[MilvusSVSVamanaLeanVecTypedDict]
     )
 
 
+class MilvusFaissSVSVamanaTypedDict(CommonTypedDict, MilvusTypedDict):
+    faiss_index_name: Annotated[
+        str,
+        click.option(
+            "--faiss-index-name",
+            type=str,
+            help="Faiss factory string, e.g. SVSVamana64, SVSVamana64,LVQ4x8 or SVSVamana64,LeanVec4x8_16.",
+            required=True,
+        ),
+    ]
+    prune_to: Annotated[
+        int | None,
+        click.option("--prune-to", type=int, help="Degree to prune to during construction."),
+    ]
+    alpha: Annotated[
+        float | None,
+        click.option("--alpha", type=float, help="Pruning parameter."),
+    ]
+    construction_window_size: Annotated[
+        int | None,
+        click.option("--construction-window-size", type=int, help="Window size for graph construction."),
+    ]
+    max_candidate_pool_size: Annotated[
+        int | None,
+        click.option("--max-candidate-pool-size", type=int, help="Maximum candidate pool size for construction."),
+    ]
+    use_full_search_history: Annotated[
+        bool | None,
+        click.option(
+            "--use-full-search-history",
+            type=bool,
+            help="Use the full search history during construction.",
+        ),
+    ]
+    ood_training: Annotated[
+        bool | None,
+        click.option(
+            "--ood-training",
+            type=bool,
+            help="Train for out-of-distribution queries (LeanVec only; Milvus enables it for LeanVec if unset).",
+        ),
+    ]
+    search_window_size: Annotated[
+        int | None,
+        click.option("--search-window-size", type=int, help="Window size for search."),
+    ]
+    search_buffer_capacity: Annotated[
+        int | None,
+        click.option("--search-buffer-capacity", type=int, help="Buffer capacity for search priority queue."),
+    ]
+
+
+@cli.command()
+@click_parameter_decorators_from_typed_dict(MilvusFaissSVSVamanaTypedDict)
+def MilvusFaissSVSVamana(**parameters: Unpack[MilvusFaissSVSVamanaTypedDict]):
+    from .config import FaissSVSVamanaConfig
+
+    run(
+        db=DBTYPE,
+        db_config=milvus_db_config(parameters),
+        db_case_config=FaissSVSVamanaConfig(
+            faiss_index_name=parameters["faiss_index_name"],
+            prune_to=parameters["prune_to"],
+            alpha=parameters["alpha"],
+            construction_window_size=parameters["construction_window_size"],
+            max_candidate_pool_size=parameters["max_candidate_pool_size"],
+            use_full_search_history=parameters["use_full_search_history"],
+            ood_training=parameters["ood_training"],
+            search_window_size=parameters["search_window_size"],
+            search_buffer_capacity=parameters["search_buffer_capacity"],
+            calibration_target=parameters["calibrate"],
+            calibration_param=parameters["calibration_param"] or "search_window_size",
+            calibration_limit=parameters["calibration_limit"],
+            calibration_extra_params=parse_calibration_extra_params(parameters["calibration_extra_params"]),
+        ),
+        **parameters,
+    )
+
+
 class MilvusGPUIVFPQTypedDict(
     CommonTypedDict,
     MilvusTypedDict,
