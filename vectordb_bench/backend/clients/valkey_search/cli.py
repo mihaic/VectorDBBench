@@ -60,6 +60,24 @@ class ValkeySearchSVSTypedDict(CommonTypedDict, ValkeySearchTypedDict):
             help="SVS alpha parameter",
         ),
     ]
+    svs_algorithm_name: Annotated[
+        str,
+        click.option(
+            "--svs-algorithm-name",
+            type=str,
+            default="SVS",
+            help="FT.CREATE algorithm name (SVS_VAMANA for the SVS C API build)",
+        ),
+    ]
+    svs_runtime_param: Annotated[
+        str,
+        click.option(
+            "--svs-runtime-param",
+            type=str,
+            default="SEARCH_WINDOW_SIZE",
+            help="KNN query-time search window parameter (EF_RUNTIME for the SVS C API build)",
+        ),
+    ]
 
 
 @cli.command()
@@ -104,6 +122,8 @@ def ValkeySearchSVS(**parameters: Unpack[ValkeySearchSVSTypedDict]):
             construction_window_size=parameters["construction_window_size"],
             search_window_size=parameters["search_window_size"],
             alpha=parameters["alpha"],
+            algorithm_name=parameters["svs_algorithm_name"],
+            runtime_param=parameters["svs_runtime_param"],
         ),
         **parameters,
     )

@@ -154,8 +154,9 @@ class ValkeySearch(VectorDB):
         knn_extra = ""
         if algo == "HNSW" and "EF_RUNTIME" in params:
             knn_extra = f" EF_RUNTIME {params['EF_RUNTIME']}"
-        elif algo == "SVS" and "SEARCH_WINDOW_SIZE" in params:
-            knn_extra = f" SEARCH_WINDOW_SIZE {params['SEARCH_WINDOW_SIZE']}"
+        elif algo == "SVS" and params:
+            (name, value), = params.items()
+            knn_extra = f" {name} {value}"
 
         query_str = f"*=>[KNN {k} @vector $vec{knn_extra}]"
 

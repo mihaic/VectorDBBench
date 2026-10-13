@@ -48,11 +48,15 @@ class ValkeySearchSVSConfig(BaseModel, DBCaseConfig):
     construction_window_size: int = 128
     search_window_size: int = 10
     alpha: float = 1.2
+    # The SVS C API build of valkey-search uses ALGORITHM SVS_VAMANA and
+    # takes the query-time search window as EF_RUNTIME.
+    algorithm_name: str = "SVS"
+    runtime_param: str = "SEARCH_WINDOW_SIZE"
     metric_type: MetricType | None = None
 
     def index_param(self) -> dict:
         return {
-            "algorithm": "SVS",
+            "algorithm": self.algorithm_name,
             "params": {
                 "GRAPH_MAX_DEGREE": self.graph_max_degree,
                 "CONSTRUCTION_WINDOW_SIZE": self.construction_window_size,
@@ -65,6 +69,6 @@ class ValkeySearchSVSConfig(BaseModel, DBCaseConfig):
         return {
             "algorithm": "SVS",
             "params": {
-                "SEARCH_WINDOW_SIZE": self.search_window_size,
+                self.runtime_param: self.search_window_size,
             },
         }
