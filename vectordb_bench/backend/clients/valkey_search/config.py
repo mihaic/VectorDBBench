@@ -24,11 +24,14 @@ class ValkeySearchHNSWConfig(BaseModel, DBCaseConfig):
     M: int = 16
     efConstruction: int = 200
     ef: int = 10
+    # Vector TYPE: FLOAT32, FLOAT16 or BFLOAT16; stored and query vectors use it
+    data_type: str = "FLOAT32"
     metric_type: MetricType | None = None
 
     def index_param(self) -> dict:
         return {
             "algorithm": "HNSW",
+            "data_type": self.data_type,
             "params": {
                 "M": self.M,
                 "EF_CONSTRUCTION": self.efConstruction,

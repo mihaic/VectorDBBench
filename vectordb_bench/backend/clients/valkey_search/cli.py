@@ -20,7 +20,16 @@ class ValkeySearchTypedDict(TypedDict):
     port: Annotated[int, click.option("--port", type=int, default=6379, help="Valkey port")]
 
 
-class ValkeySearchHNSWTypedDict(CommonTypedDict, ValkeySearchTypedDict, HNSWFlavor2): ...
+class ValkeySearchHNSWTypedDict(CommonTypedDict, ValkeySearchTypedDict, HNSWFlavor2):
+    data_type: Annotated[
+        str,
+        click.option(
+            "--data-type",
+            type=click.Choice(["FLOAT32", "FLOAT16", "BFLOAT16"]),
+            default="FLOAT32",
+            help="Vector TYPE of the HNSW index; stored and query vectors use it",
+        ),
+    ]
 
 
 class ValkeySearchSVSTypedDict(CommonTypedDict, ValkeySearchTypedDict):
@@ -98,6 +107,7 @@ def ValkeySearchHNSW(**parameters: Unpack[ValkeySearchHNSWTypedDict]):
             M=parameters["m"],
             efConstruction=parameters["ef_construction"],
             ef=parameters["ef_runtime"],
+            data_type=parameters["data_type"],
         ),
         **parameters,
     )

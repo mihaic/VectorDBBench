@@ -13,6 +13,17 @@ log = logging.getLogger(__name__)
 INDEX_NAME = "vdbbench"
 
 
+def encode_vector(vec, data_type: str = "FLOAT32") -> bytes:
+    """Vector bytes in the index's TYPE: FLOAT32, FLOAT16 or BFLOAT16."""
+    a = np.asarray(vec, dtype=np.float32)
+    if data_type == "BFLOAT16":
+        from ml_dtypes import bfloat16  # only needed for BFLOAT16 indexes
+        return a.astype(bfloat16).tobytes()
+    if data_type == "FLOAT16":
+        return a.astype(np.float16).tobytes()
+    return a.tobytes()
+
+
 class ValkeySearch(VectorDB):
     """Valkey-search client supporting both HNSW and SVS algorithms."""
 
@@ -30,6 +41,8 @@ class ValkeySearch(VectorDB):
         self.collection_name = INDEX_NAME
         self.dim = dim
         self.extra_index_params = extra_index_params or {}
+        # SVS keeps FLOAT32 vectors (it compresses with COMPRESSION instead)
+        self.data_type = self.case_config.index_param().get("data_type", "FLOAT32")
 
         conn = redis.Redis(
             host=self.db_config["host"],
@@ -62,7 +75,7 @@ class ValkeySearch(VectorDB):
         # We use raw execute_command because redis-py's VectorField
         # only knows about HNSW and FLAT — it doesn't support SVS.
         vector_kv = [
-            "TYPE", "FLOAT32",
+            "TYPE", self.data_type,
             "DIM", str(dim),
             "DISTANCE_METRIC", "L2",
         ]
@@ -116,7 +129,7 @@ class ValkeySearch(VectorDB):
         try:
             with self.conn.pipeline(transaction=False) as pipe:
                 for i, embedding in enumerate(embeddings):
-                    vec_bytes = np.array(embedding, dtype=np.float32).tobytes()
+                    vec_bytes = encode_vector(embedding, self.data_type)
                     key = f"{INDEX_NAME}:{metadata[i]}"
                     pipe.hset(
                         key,
@@ -144,7 +157,7 @@ class ValkeySearch(VectorDB):
     ) -> list[int]:
         assert self.conn is not None
 
-        query_vector = np.array(query, dtype=np.float32).tobytes()
+        query_vector = encode_vector(query, self.data_type)
 
         # Build KNN clause with algorithm-specific runtime params.
         search_params = self.case_config.search_param()

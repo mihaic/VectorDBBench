@@ -92,7 +92,7 @@ pgvector        = [ "psycopg", "psycopg-binary", "pgvector" ]
 # for pgvector, pgvectorscale, pgdiskann, and, alloydb
 
 pgvecto_rs      = [ "pgvecto_rs[psycopg3]>=0.2.2" ]
-redis           = [ "redis" ]
+redis           = [ "redis", "ml_dtypes" ]
 memorydb        = [ "memorydb" ]
 chromadb        = [ "chromadb" ]
 opensearch      = [ "opensearch-py" ]
