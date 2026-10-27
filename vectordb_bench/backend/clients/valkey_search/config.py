@@ -55,17 +55,30 @@ class ValkeySearchSVSConfig(BaseModel, DBCaseConfig):
     # takes the query-time search window as EF_RUNTIME.
     algorithm_name: str = "SVS"
     runtime_param: str = "SEARCH_WINDOW_SIZE"
+    # COMPRESSION: NONE, FP16, SQ8, LVQ* or LEANVEC*. SQ8, LVQ and LeanVec
+    # start uncompressed and convert at TRAINING_THRESHOLD vectors; LeanVec
+    # also needs REDUCE, the reduced dimension count.
+    compression: str = "NONE"
+    reduce: int | None = None
+    training_threshold: int | None = None
     metric_type: MetricType | None = None
 
     def index_param(self) -> dict:
+        params = {
+            "GRAPH_MAX_DEGREE": self.graph_max_degree,
+            "CONSTRUCTION_WINDOW_SIZE": self.construction_window_size,
+            "SEARCH_WINDOW_SIZE": self.search_window_size,
+            "ALPHA": self.alpha,
+        }
+        if self.compression != "NONE":
+            params["COMPRESSION"] = self.compression
+        if self.reduce is not None:
+            params["REDUCE"] = self.reduce
+        if self.training_threshold is not None:
+            params["TRAINING_THRESHOLD"] = self.training_threshold
         return {
             "algorithm": self.algorithm_name,
-            "params": {
-                "GRAPH_MAX_DEGREE": self.graph_max_degree,
-                "CONSTRUCTION_WINDOW_SIZE": self.construction_window_size,
-                "SEARCH_WINDOW_SIZE": self.search_window_size,
-                "ALPHA": self.alpha,
-            },
+            "params": params,
         }
 
     def search_param(self) -> dict:

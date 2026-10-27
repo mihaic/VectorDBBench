@@ -87,6 +87,40 @@ class ValkeySearchSVSTypedDict(CommonTypedDict, ValkeySearchTypedDict):
             help="KNN query-time search window parameter (EF_RUNTIME for the SVS C API build)",
         ),
     ]
+    compression: Annotated[
+        str,
+        click.option(
+            "--compression",
+            type=click.Choice(
+                [
+                    "NONE", "FP16", "SQ8",
+                    "LVQ4", "LVQ8", "LVQ4X4", "LVQ4X8",
+                    "LEANVEC4X4", "LEANVEC4X8", "LEANVEC8X8",
+                ]
+            ),
+            default="NONE",
+            help="SVS COMPRESSION; LVQ and LEANVEC need the prebuilt SVS C API build",
+        ),
+    ]
+    reduce: Annotated[
+        int | None,
+        click.option(
+            "--reduce",
+            type=int,
+            default=None,
+            help="LeanVec reduced dimension count (REDUCE), required for LEANVEC compression",
+        ),
+    ]
+    training_threshold: Annotated[
+        int | None,
+        click.option(
+            "--training-threshold",
+            type=int,
+            default=None,
+            help="Vectors to hold uncompressed before SQ8/LVQ/LEANVEC conversion "
+            "(TRAINING_THRESHOLD, server default 1024)",
+        ),
+    ]
 
 
 @cli.command()
@@ -134,6 +168,9 @@ def ValkeySearchSVS(**parameters: Unpack[ValkeySearchSVSTypedDict]):
             alpha=parameters["alpha"],
             algorithm_name=parameters["svs_algorithm_name"],
             runtime_param=parameters["svs_runtime_param"],
+            compression=parameters["compression"],
+            reduce=parameters["reduce"],
+            training_threshold=parameters["training_threshold"],
         ),
         **parameters,
     )

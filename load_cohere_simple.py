@@ -2,13 +2,15 @@
 """
 Non-pipelined loader for Cohere 1M dataset.
 
-Supports HNSW, SVS (no compression), and SVS with LVQ4X8 compression.
+Supports HNSW, SVS (no compression), and SVS with LVQ or LeanVec compression.
 Inserts vectors one-at-a-time to avoid pipeline deadlock with SVS buffer flushing.
 
 Usage:
     python3 load_cohere_simple.py --algorithm hnsw --flush-db
     python3 load_cohere_simple.py --algorithm svs --flush-db
     python3 load_cohere_simple.py --algorithm svs --compression LVQ4X8 --flush-db
+    python3 load_cohere_simple.py --algorithm svs --svs-algorithm-name SVS_VAMANA \
+        --compression LEANVEC4X8 --reduce 192 --flush-db
 """
 import argparse
 import logging
@@ -28,7 +30,15 @@ log = logging.getLogger(__name__)
 INDEX_NAME = "vdbbench"
 
 
-def create_index(conn: redis.Redis, dim: int, algorithm: str, compression: str | None = None):
+def create_index(
+    conn: redis.Redis,
+    dim: int,
+    algorithm: str,
+    compression: str | None = None,
+    reduce: int | None = None,
+    training_threshold: int | None = None,
+    svs_algorithm_name: str = "SVS",
+):
     """Create index matching VectorDBBench schema."""
     try:
         conn.ft(INDEX_NAME).info()
@@ -67,6 +77,12 @@ def create_index(conn: redis.Redis, dim: int, algorithm: str, compression: str |
         ]
         if compression and compression != "NONE":
             vector_kv.extend(["COMPRESSION", compression])
+        # LeanVec reduced dimension count; required for LEANVEC compression
+        if reduce is not None:
+            vector_kv.extend(["REDUCE", str(reduce)])
+        # SQ8/LVQ/LEANVEC stay uncompressed until this many vectors
+        if training_threshold is not None:
+            vector_kv.extend(["TRAINING_THRESHOLD", str(training_threshold)])
         cmd = [
             "FT.CREATE", INDEX_NAME,
             "ON", "HASH",
@@ -74,10 +90,13 @@ def create_index(conn: redis.Redis, dim: int, algorithm: str, compression: str |
             "SCHEMA",
             "id", "TAG",
             "metadata", "NUMERIC",
-            "vector", "VECTOR", "SVS", str(len(vector_kv)),
+            "vector", "VECTOR", svs_algorithm_name, str(len(vector_kv)),
         ] + vector_kv
         comp_str = compression or "NONE"
-        log.info(f"Creating SVS index: dim={dim}, GRAPH_MAX_DEGREE=64, COMPRESSION={comp_str}")
+        log.info(
+            f"Creating {svs_algorithm_name} index: dim={dim}, GRAPH_MAX_DEGREE=64, "
+            f"COMPRESSION={comp_str}, REDUCE={reduce}, TRAINING_THRESHOLD={training_threshold}"
+        )
 
     else:
         raise ValueError(f"Unknown algorithm: {algorithm}")
@@ -146,7 +165,14 @@ def main():
         default="/tmp/vectordb_bench/dataset/cohere/cohere_medium_1m/shuffle_train.parquet",
     )
     parser.add_argument("--algorithm", choices=["hnsw", "svs"], default="svs")
-    parser.add_argument("--compression", default=None, help="SVS compression: NONE, LVQ4X8, etc.")
+    parser.add_argument("--compression", default=None, help="SVS compression: NONE, LVQ4X8, LEANVEC4X8, etc.")
+    parser.add_argument("--reduce", type=int, help="LeanVec reduced dimension count (required for LEANVEC)")
+    parser.add_argument("--training-threshold", type=int, help="Vectors before SQ8/LVQ/LEANVEC conversion")
+    parser.add_argument(
+        "--svs-algorithm-name",
+        default="SVS",
+        help="FT.CREATE algorithm name (SVS_VAMANA for the SVS C API build)",
+    )
     parser.add_argument("--max-vectors", type=int, help="Stop after N vectors (for testing)")
     parser.add_argument("--flush-db", action="store_true")
 
@@ -166,7 +192,15 @@ def main():
     dim = len(first_batch['emb'].values[0])
     log.info(f"Detected dimension: {dim}")
 
-    create_index(conn, dim, args.algorithm, args.compression)
+    create_index(
+        conn,
+        dim,
+        args.algorithm,
+        args.compression,
+        args.reduce,
+        args.training_threshold,
+        args.svs_algorithm_name,
+    )
     load_dataset(conn, parquet_path, args.max_vectors)
 
     dbsize = conn.dbsize()
