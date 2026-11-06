@@ -37,6 +37,7 @@ class IndexType(StrEnum):
     HNSW_BQ = "HNSW_BQ"
     HNSW_PQ = "HNSW_PQ"
     HNSW_PRQ = "HNSW_PRQ"
+    HNSW_RABITQ = "HNSW_RABITQ"
     DISKANN = "DISKANN"
     STREAMING_DISKANN = "DISKANN"
     IVFFlat = "IVF_FLAT"

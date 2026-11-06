@@ -231,6 +231,41 @@ class HNSWPRQConfig(HNSWPQConfig):
         }
 
 
+class HNSWRABITQConfig(HNSWConfig):
+    index: IndexType = IndexType.HNSW_RABITQ
+    rbq_bits: int = 1  # 1, 2, ..., 9
+    rbq_bits_query: int = 0  # 0, 1, 2, ..., 8
+    refine: bool = True
+    refine_type: SQType = SQType.SQ8
+    refine_k: float = 1
+
+    def index_param(self) -> dict:
+        return {
+            "metric_type": self.parse_metric(),
+            "index_type": self.index.value,
+            "params": {
+                "M": self.M,
+                "efConstruction": self.efConstruction,
+                "rbq_bits": self.rbq_bits,
+                "refine": self.refine,
+                "refine_type": self.refine_type.value,
+            },
+        }
+
+    def search_param(self) -> dict:
+        return {
+            "metric_type": self.parse_metric(),
+            "params": {
+                "ef": self.ef,
+                "rbq_bits_query": self.rbq_bits_query,
+                "refine_k": self.refine_k,
+                "calibration_target": self.calibration_target,
+                "calibration_param": self.calibration_param,
+                "calibration_limit": self.calibration_limit,
+            },
+        }
+
+
 class DISKANNConfig(MilvusIndexConfig, DBCaseConfig):
     search_list: int | None = None
     index: IndexType = IndexType.DISKANN
@@ -701,6 +736,7 @@ _milvus_case_config = {
     IndexType.HNSW_SQ: HNSWSQConfig,
     IndexType.HNSW_PQ: HNSWPQConfig,
     IndexType.HNSW_PRQ: HNSWPRQConfig,
+    IndexType.HNSW_RABITQ: HNSWRABITQConfig,
     IndexType.DISKANN: DISKANNConfig,
     IndexType.IVFFlat: IVFFlatConfig,
     IndexType.IVFPQ: IVFPQConfig,

@@ -314,6 +314,81 @@ def MilvusHNSWSQ(**parameters: Unpack[MilvusHNSWSQTypedDict]):
     )
 
 
+class MilvusHNSWRABITQTypedDict(CommonTypedDict, MilvusTypedDict, MilvusHNSWTypedDict):
+    rbq_bits: Annotated[
+        int,
+        click.option(
+            "--rbq-bits",
+            type=click.IntRange(1, 9),
+            help="The number of RaBitQ bits per database vector dimension.",
+            default=1,
+            show_default=True,
+        ),
+    ]
+    rbq_bits_query: Annotated[
+        int,
+        click.option(
+            "--rbq-bits-query",
+            type=int,
+            help="The level of quantization of a query vector. Use 1…8 for the SQ1…SQ8 and 0 to disable.",
+            default=0,
+            show_default=True,
+        ),
+    ]
+    refine: Annotated[
+        bool,
+        click.option(
+            "--refine",
+            type=bool,
+            default=True,
+            show_default=True,
+            help="Whether refined data is reserved during index building.",
+        ),
+    ]
+    refine_type: Annotated[
+        str,
+        click.option(
+            "--refine-type",
+            type=click.Choice(["SQ6", "SQ8", "BF16", "FP16", "FP32"], case_sensitive=False),
+            default="SQ8",
+            show_default=True,
+            help="The data type of the refine index to use. Supported values: SQ6,SQ8,BF16,FP16,FP32",
+        ),
+    ]
+    refine_k: Annotated[
+        float,
+        click.option(
+            "--refine-k",
+            type=float,
+            default=1.0,
+            show_default=True,
+            help="The magnification factor of refine compared to k.",
+        ),
+    ]
+
+
+@cli.command()
+@click_parameter_decorators_from_typed_dict(MilvusHNSWRABITQTypedDict)
+def MilvusHNSWRabitQ(**parameters: Unpack[MilvusHNSWRABITQTypedDict]):
+    from .config import HNSWRABITQConfig
+
+    run(
+        db=DBTYPE,
+        db_config=milvus_db_config(parameters),
+        db_case_config=HNSWRABITQConfig(
+            M=parameters["m"],
+            efConstruction=parameters["ef_construction"],
+            ef=parameters["ef_search"],
+            rbq_bits=parameters["rbq_bits"],
+            rbq_bits_query=parameters["rbq_bits_query"],
+            refine=parameters["refine"],
+            refine_type=parameters["refine_type"].upper(),
+            refine_k=parameters["refine_k"],
+        ),
+        **parameters,
+    )
+
+
 class MilvusIVFFlatTypedDict(CommonTypedDict, MilvusTypedDict, IVFFlatTypedDictN): ...
 
 
