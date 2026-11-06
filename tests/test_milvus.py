@@ -288,18 +288,20 @@ def test_milvus_batch_search_counts_successful_queries(monkeypatch):
         return float(db.client.search.call_count)
 
     clock.side_effect = perf_counter
-    monkeypatch.setattr("vectordb_bench.backend.runner.mp_runner.time", SimpleNamespace(perf_counter=clock))
+    monkeypatch.setattr(
+        "vectordb_bench.backend.runner.mp_runner.time", SimpleNamespace(perf_counter=clock, time=lambda: 0.0)
+    )
 
-    count, _, latencies = runner.search(queries, MagicMock(), MagicMock())
+    count, _, latencies, _ = runner.search(queries, MagicMock(), MagicMock())
     assert count == 2
-    assert latencies == [1.0]
+    assert latencies.tolist() == [1.0]
     assert db.client.search.call_count == 3
     expected_batches = [queries[:2], [queries[2], queries[0]], queries[1:]]
     assert [c.kwargs["data"] for c in db.client.search.call_args_list] == expected_batches
 
     db.client.search.reset_mock()
     db.client.search.side_effect = responses
-    count, failed_count, stats = runner.search_by_dur(3, queries, MagicMock(), MagicMock())
+    count, failed_count, stats, _ = runner.search_by_dur(3, queries, MagicMock(), MagicMock())
     assert (count, failed_count) == (2, 4)
     assert stats["count"] == 1
     assert stats["avg"] == pytest.approx(1.0, rel=0.01)

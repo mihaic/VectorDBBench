@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from vectordb_bench.backend.cases import CaseLabel, CaseType
@@ -150,6 +151,21 @@ def test_concurrent_latency_aggregation_handles_empty_success_window():
     assert runner._aggregate_latency_stats([]) == (0, 0, 0, 0)
     assert hasattr(runner, "_latency_summary")
     assert runner._latency_summary([]) == (0, 0, 0, 0)
+
+
+def test_concurrent_latency_summary_accepts_merged_worker_arrays():
+    runner = MultiProcessingSearchRunner(db=SearchProbeDB(), test_data=[[0.1]])
+    latencies = np.concatenate([np.array([0.1, 0.2]), np.array([]), np.array([0.3])])
+
+    assert runner._latency_summary(latencies) == pytest.approx((0.298, 0.29, 0.2, 0.2))
+    assert runner._latency_summary(np.array([])) == (0, 0, 0, 0)
+
+
+def test_concurrent_search_window_spans_all_workers():
+    # QPS is computed over the workers' own search windows, not the time spent collecting results.
+    windows = [(100.0, 130.0), (100.5, 130.5), (99.8, 129.9)]
+
+    assert MultiProcessingSearchRunner._search_window(windows) == pytest.approx(30.7)
 
 
 @pytest.mark.parametrize(
