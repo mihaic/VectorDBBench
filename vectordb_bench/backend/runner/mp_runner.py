@@ -1,3 +1,4 @@
+import array
 import concurrent
 import contextlib
 import logging
@@ -62,7 +63,14 @@ class MultiProcessingSearchRunner:
         q: mp.Queue,
         cond: mp.Condition,
         config_overwrite: dict | None = None,
-    ) -> tuple[int, float]:
+    ) -> tuple[int, float, np.ndarray, tuple[float, float]]:
+        """
+        Returns:
+            int: successful query vectors count
+            float: search duration in this process
+            np.ndarray: per-request latencies in seconds
+            tuple[float, float]: wall-clock (start, end) of the search window
+        """
         # sync all process
         q.put(1)
         with cond:
@@ -77,9 +85,10 @@ class MultiProcessingSearchRunner:
             self.db.prepare_filter(self.filters)
             num, idx = len(test_data), random.randint(0, len(test_data) - 1)
 
+            window_start = time.time()
             start_time = time.perf_counter()
             count = 0
-            latencies = []
+            latencies = array.array("d")
             while time.perf_counter() < start_time + self.duration:
                 s = time.perf_counter()
                 try:
@@ -98,13 +107,15 @@ class MultiProcessingSearchRunner:
                         f"search_count: {count}, latest_latency={time.perf_counter()-s}"
                     )
 
-        total_dur = round(time.perf_counter() - start_time, 4)
+            total_dur = round(time.perf_counter() - start_time, 4)
+            window_end = time.time()
+
         log.info(
             f"{mp.current_process().name:16} search {self.duration}s: "
             f"actual_dur={total_dur}s, count={count}, qps in this process: {round(count / total_dur, 4):3}"
         )
 
-        return (count, total_dur, latencies)
+        return (count, total_dur, np.frombuffer(latencies), (window_start, window_end))
 
     @staticmethod
     def get_mp_context():
@@ -136,13 +147,13 @@ class MultiProcessingSearchRunner:
                             cond.notify_all()
                             log.info(f"Syncing all process and start concurrency search, concurrency={conc}")
 
-                        start = time.perf_counter()
-                        all_count = sum([r.result()[0] for r in future_iter])
-                        latencies = sum([r.result()[2] for r in future_iter], start=[])
+                        res = [r.result() for r in future_iter]
+                        all_count = sum(r[0] for r in res)
+                        latencies = np.concatenate([r[2] for r in res])
                         latency_p99 = np.percentile(latencies, 99)
                         latency_p95 = np.percentile(latencies, 95)
                         latency_avg = np.mean(latencies)
-                        cost = time.perf_counter() - start
+                        cost = self._search_window([r[3] for r in res])
 
                         qps = round(all_count / cost, 4)
                         conc_num_list.append(conc)
@@ -195,6 +206,15 @@ class MultiProcessingSearchRunner:
 
     def stop(self) -> None:
         pass
+
+    @staticmethod
+    def _search_window(windows: list[tuple[float, float]]) -> float:
+        """Seconds from the first worker's search start to the last worker's search end.
+
+        Excludes process startup, result transfer, and latency aggregation, which
+        would otherwise deflate QPS as the number of recorded requests grows.
+        """
+        return max(end for _, end in windows) - min(start for start, _ in windows)
 
     def _aggregate_latency_stats(self, res: list) -> tuple[float, float, float]:
         """Aggregate latency stats from worker processes.
@@ -267,12 +287,12 @@ class MultiProcessingSearchRunner:
                             cond.notify_all()
                             log.info(f"Syncing all process and start concurrency search, concurrency={conc}")
 
-                        start = time.perf_counter()
                         res = [r.result() for r in future_iter]
                         all_success_count = sum([r[0] for r in res])
                         all_failed_count = sum([r[1] for r in res])
-                        failed_rate = all_failed_count / (all_failed_count + all_success_count)
-                        cost = time.perf_counter() - start
+                        total_count = all_failed_count + all_success_count
+                        failed_rate = all_failed_count / total_count if total_count > 0 else 0
+                        cost = self._search_window([r[3] for r in res])
 
                         qps = round(all_success_count / cost, 4)
 
@@ -318,12 +338,13 @@ class MultiProcessingSearchRunner:
     def search_by_dur(
         self, dur: int, test_data: list[list[float]], q: mp.Queue, cond: mp.Condition,
         config_overwrite: dict | None = None,
-    ) -> tuple[int, int, dict]:
+    ) -> tuple[int, int, dict, tuple[float, float]]:
         """
         Returns:
             int: successful requests count
             int: failed requests count
             dict: latency statistics with p99, p95, avg, count (computed via HDR Histogram)
+            tuple[float, float]: wall-clock (start, end) of the search window
         """
         # sync all process
         q.put(1)
@@ -337,6 +358,7 @@ class MultiProcessingSearchRunner:
             # Memory-efficient latency tracking
             histogram = HdrHistogram(HDR_HISTOGRAM_MIN_US, HDR_HISTOGRAM_MAX_US, HDR_HISTOGRAM_SIGNIFICANT_DIGITS)
 
+            window_start = time.time()
             start_time = time.perf_counter()
             success_count = 0
             failed_cnt = 0
@@ -363,7 +385,9 @@ class MultiProcessingSearchRunner:
                         f"({mp.current_process().name:16}) search_count: {success_count}",
                     )
 
-        total_dur = round(time.perf_counter() - start_time, 4)
+            total_dur = round(time.perf_counter() - start_time, 4)
+            window_end = time.time()
+
         log.debug(
             f"{mp.current_process().name:16} search {self.duration}s: "
             f"actual_dur={total_dur}s, count={success_count}, failed_cnt={failed_cnt}, "
@@ -378,4 +402,4 @@ class MultiProcessingSearchRunner:
             "count": histogram.get_total_count(),
         }
 
-        return success_count, failed_cnt, latency_stats
+        return success_count, failed_cnt, latency_stats, (window_start, window_end)
