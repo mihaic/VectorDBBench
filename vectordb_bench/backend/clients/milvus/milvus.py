@@ -182,7 +182,17 @@ class Milvus(VectorDB):
         L0 segments only hold deletes and are never force-merge targets, so they
         are excluded from both convergence and load-coverage accounting.
         """
-        segments = self.client.list_persistent_segments(self.collection_name)
+        # Milvus 2.6 can drop a segment mid-listing while compaction runs, failing
+        # the call with "segment not found"; the next listing is consistent again.
+        for attempt in range(10):
+            try:
+                segments = self.client.list_persistent_segments(self.collection_name)
+                break
+            except MilvusException as e:
+                if "segment not found" not in str(e) or attempt == 9:
+                    raise
+                log.info(f"{self.name} segment listing raced with compaction, retrying: {e}")
+                time.sleep(MILVUS_OPTIMIZE_POLL_INTERVAL)
         return [
             s
             for s in segments
